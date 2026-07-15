@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+
+ml_training_dataset.csv
+compiled_historical_daily.csv
+compiled_recent_1m.csv
+
+data/
+models/
