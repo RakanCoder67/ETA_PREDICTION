@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Starlink Satellite Orbit Predictor</title>
+
+  <!-- Chart.js for rendering the output graph -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ==========================================================================
+       SIMPLE STUDENT-STYLE DESIGN
+       ========================================================================== */
+    body {
+      background-color: #1e1e24;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 20px 0;
+      border-bottom: 2px solid #3b3b4f;
+      margin-bottom: 30px;
+    }
+
+    header h1 {
+      margin: 0 0 10px 0;
+      font-size: 24px;
+    }
+
+    header p {
+      color: #b0b0c0;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    /* CARD STYLE FOR THE INPUT TOOL */
+    .tool-section {
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+
+    .tool-section h2 {
+      font-size: 18px;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .tool-section p {
+      color: #b0b0c0;
+      font-size: 13px;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      gap: 10px;
+    }
+
+    .input-field {
+      flex: 1;
+    }
+
+    .input-field input {
+      width: 100%;
+      background-color: #1e1e24;
+      border: 1px solid #3e3e4f;
+      border-radius: 4px;
+      padding: 10px;
+      font-size: 14px;
+      color: #ffffff;
+      box-sizing: border-box;
+    }
+
+    .btn {
+      background-color: #3b82f6;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      background-color: #2563eb;
+    }
+
+    .btn:disabled {
+      background-color: #555555;
+      cursor: not-allowed;
+    }
+
+    .suggestions {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #a0a0b0;
+    }
+
+    .suggest-chip {
+      color: #3b82f6;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-left: 5px;
+    }
+
+    /* LOADER & ERRORS */
+    .loader {
+      display: none;
+      margin-top: 15px;
+      font-size: 13px;
+      color: #a0a0b0;
+    }
+
+    .error-box {
+      display: none;
+      margin-top: 15px;
+      padding: 10px;
+      background-color: rgba(239, 68, 68, 0.1);
+      border: 1px solid #ef4444;
+      border-radius: 4px;
+      color: #fca5a5;
+      font-size: 13px;
+    }
+
+    /* RESULTS OUTPUT */
+    .results-block {
+      display: none;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #3e3e4f;
+    }
+
+    .results-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .results-info h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .results-info p {
+      margin: 5px 0 0 0;
+      font-size: 12px;
+      color: #808090;
+    }
+
+    .status-badge {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .badge-in {
+      background-color: #fbbf24;
+      color: #000000;
+    }
+
+    .badge-out {
+      background-color: #4b5563;
+      color: #ffffff;
+    }
+
+    .chart-box {
+      height: 250px;
+      background-color: #1e1e24;
+      border: 1px solid #3e3e4f;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+
+    .toggle-btn {
+      background: none;
+      border: 1px solid #3e3e4f;
+      color: #a0a0b0;
+      padding: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+      text-align: center;
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
+
+    .toggle-btn:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .table-container {
+      display: none;
+      margin-top: 10px;
+      border: 1px solid #3e3e4f;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th {
+      background-color: #2b2b36;
+      padding: 8px;
+      border-bottom: 1px solid #3e3e4f;
+      text-align: left;
+    }
+
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #3e3e4f;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ACCURACY COMPARISON */
+    .compare-section {
+      margin-bottom: 40px;
+    }
+
+    .compare-section h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    .compare-table th {
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      padding: 10px;
+    }
+
+    .compare-table td {
+      border: 1px solid #3e3e4f;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .compare-table td.best {
+      color: #34d399;
+      font-weight: bold;
+    }
+
+    /* GRAPHS ROW (24H & 30D ONLY) */
+    .graphs-section {
+      margin-bottom: 40px;
+    }
+
+    .graphs-section h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .graphs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .graph-card {
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .graph-card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      display: block;
+      border-bottom: 1px solid #3e3e4f;
+    }
+
+    .graph-info {
+      padding: 10px;
+    }
+
+    .graph-title {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .graph-desc {
+      font-size: 12px;
+      color: #a0a0b0;
+      margin-top: 4px;
+    }
+
+    /* HOW IT WORKS SECTION */
+    .info-section {
+      margin-bottom: 30px;
+    }
+
+    .info-section h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 15px;
+    }
+
+    .info-card {
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      border-radius: 6px;
+      padding: 15px;
+    }
+
+    .info-title {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .info-desc {
+      font-size: 12px;
+      color: #a0a0b0;
+      line-height: 1.4;
+    }
+
+    /* LIGHTBOX */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background-color: rgba(0, 0, 0, 0.9);
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    #lightbox.active {
+      display: flex;
+    }
+
+    #lightbox img {
+      max-width: 90vw;
+      max-height: 85vh;
+      border: 1px solid #3e3e4f;
+    }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: #808090;
+      padding: 20px 0;
+      border-top: 1px solid #3b3b4f;
+    }
+
+    @media (max-width: 768px) {
+      .graphs-grid { grid-template-columns: 1fr; }
+      .info-grid { grid-template-columns: 1fr; }
+      .form-group { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- HEADER -->
+    <header>
+      <h1>Starlink Orbit Correction Dashboard</h1>
+      <p>A simple simulator that calculates atmospheric drag corrections for Starlink satellites when they pass through the Equatorial Thermosphere Anomaly.</p>
+    </header>
+
+    <!-- SIMULATOR TOOL -->
+    <section class="tool-section">
+      <h2>Satellite Simulator</h2>
+      <p>Enter a Starlink catalog number to query space weather and apply predictions.</p>
+
+      <div class="form-group">
+        <div class="input-field">
+          <input
+            type="number"
+            id="norad-input"
+            placeholder="NORAD Catalog ID (e.g. 44952)"
+            min="1"
+            autocomplete="off"
+          />
+        </div>
+        <button id="predict-btn" class="btn" onclick="runPrediction()">Run Correction</button>
+      </div>
+
+      <div class="suggestions">
+        Sample IDs: 
+        <span class="suggest-chip" onclick="setNorad(44952)">44952</span> | 
+        <span class="suggest-chip" onclick="setNorad(46375)">46375</span> | 
+        <span class="suggest-chip" onclick="setNorad(59470)">59470</span> | 
+        <span class="suggest-chip" onclick="setNorad(63090)">63090</span> | 
+        <span class="suggest-chip" onclick="setNorad(65676)">65676</span>
+      </div>
+
+      <!-- Loading and Error indicators -->
+      <div id="loading-spinner" class="loader">
+        <span>Running prediction calculations...</span>
+      </div>
+
+      <div id="error-message" class="error-box"></div>
+
+      <!-- RESULTS PANEL -->
+      <div id="results-block" class="results-block">
+        <div class="results-info">
+          <div>
+            <h3 id="sat-label">—</h3>
+            <p id="sat-epoch">—</p>
+          </div>
+          <span id="sat-badge" class="status-badge badge-out">—</span>
+        </div>
+
+        <div class="chart-box">
+          <canvas id="prediction-chart"></canvas>
+        </div>
+
+        <!-- Toggle raw coordinates -->
+        <button id="toggle-table-btn" class="toggle-btn" onclick="toggleDetails()">
+          Show Raw Coordinates
+        </button>
+
+        <div id="table-wrap" class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Horizon</th>
+                <th>Target Time (UTC)</th>
+                <th>Latitude / Longitude</th>
+                <th>Altitude (km)</th>
+                <th>Correction (km)</th>
+              </tr>
+            </thead>
+            <tbody id="trajectory-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACCURACY NUMBERS -->
+    <section class="compare-section">
+      <h2>Prediction Accuracy Summary</h2>
+      <p style="font-size: 13px; color: #a0a0b0; margin-top: 0;">
+        These are the average prediction errors comparing standard SGP4 against our Machine Learning model. Lower numbers mean better predictions.
+      </p>
+
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Prediction Horizon</th>
+            <th>Standard SGP4 Error</th>
+            <th>Our Machine Learning Model</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>24 Hours</strong> (Short prediction)</td>
+            <td>6.09 km</td>
+            <td class="best">0.39 km</td>
+          </tr>
+          <tr>
+            <td><strong>30 Days</strong> (Long prediction)</td>
+            <td>62.56 km</td>
+            <td class="best">2.35 km</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- FIGURES -->
+    <section class="graphs-section">
+      <h2>Evaluation Graphs</h2>
+      <p style="font-size: 13px; color: #a0a0b0; margin-top: 0;">
+        Click a graph to open it in a larger view.
+      </p>
+
+      <div class="graphs-grid">
+        <div class="graph-card" onclick="openLightbox('/images/comparison_24h.png')">
+          <img src="/images/comparison_24h.png" alt="24h comparison graph" loading="lazy" />
+          <div class="graph-info">
+            <div class="graph-title">24-Hour Prediction Error</div>
+            <div class="graph-desc">Shows error growth over 24 hours. The ML model limits drift.</div>
+          </div>
+        </div>
+
+        <div class="graph-card" onclick="openLightbox('/images/comparison_30d.png')">
+          <img src="/images/comparison_30d.png" alt="30d comparison graph" loading="lazy" />
+          <div class="graph-info">
+            <div class="graph-title">30-Day Prediction Error</div>
+            <div class="graph-desc">Tracks drift over a full month. The ML correction holds steady.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="info-section">
+      <h2>How it Works</h2>
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-title">1. Data Collection</div>
+          <div class="info-desc">Loads standard satellite parameters and matches them with space weather indexes like F10.7 solar flux.</div>
+        </div>
+        <div class="info-card">
+          <div class="info-title">2. Anomaly Check</div>
+          <div class="info-desc">Determines if the satellite is crossing the Equatorial Thermosphere Anomaly band near the equator.</div>
+        </div>
+        <div class="info-card">
+          <div class="info-title">3. Apply Correction</div>
+          <div class="info-desc">Calculates position errors and adjusts the predicted coordinates to keep them closer to reality.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      Rakan Alghamdi &copy; 2026 - High School Science Fair Project
+    </footer>
+  </div>
+
+  <!-- LIGHTBOX -->
+  <div id="lightbox" onclick="closeLightbox()">
+    <img id="lightbox-img" src="" alt="Graph Zoom" />
+  </div>
+
+  <script>
+    /* ==========================================================================
+       PAGE LOGIC
+       ========================================================================== */
+    let predictionsChart = null;
+
+    function setNorad(id) {
+      document.getElementById('norad-input').value = id;
+      document.getElementById('norad-input').focus();
+    }
+
+    document.getElementById('norad-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') runPrediction();
+    });
+
+    async function runPrediction() {
+      const inputVal = document.getElementById('norad-input').value.trim();
+      if (!inputVal) return;
+
+      const noradId = parseInt(inputVal);
+      if (isNaN(noradId) || noradId < 1) {
+        displayError('Invalid NORAD ID.');
+        return;
+      }
+
+      document.getElementById('predict-btn').disabled = true;
+      document.getElementById('loading-spinner').style.display = 'block';
+      document.getElementById('error-message').style.display = 'none';
+      document.getElementById('results-block').style.display = 'none';
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ norad_id: noradId })
+        });
+
+        if (!res.ok) {
+          const detail = await res.json();
+          throw new Error(detail.detail || `Server error: ${res.status}`);
+        }
+
+        const data = await res.json();
+        populateResults(data);
+      } catch (e) {
+        displayError(e.message);
+      } finally {
+        document.getElementById('predict-btn').disabled = false;
+        document.getElementById('loading-spinner').style.display = 'none';
+      }
+    }
+
+    function displayError(msg) {
+      const box = document.getElementById('error-message');
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+
+    function populateResults(data) {
+      // Summary text
+      document.getElementById('sat-label').textContent = data.satellite_name;
+      document.getElementById('sat-epoch').textContent = `NORAD: ${data.norad_id} | Starting: ${data.tle_epoch.replace('T', ' ').replace('Z', ' UTC')}`;
+
+      // Anomaly indicator badge
+      const badge = document.getElementById('sat-badge');
+      if (data.in_eta_now) {
+        badge.className = 'status-badge badge-in';
+        badge.textContent = 'Inside Anomaly';
+      } else {
+        badge.className = 'status-badge badge-out';
+        badge.textContent = 'Outside Anomaly';
+      }
+
+      // Chart mapping
+      const chartLabels = data.trajectory.map(p => p.offset_hours < 168 ? `+${p.offset_hours}h` : `+${Math.round(p.offset_hours/24)}d`);
+      const chartData = data.trajectory.map(p => p.correction_km);
+
+      if (predictionsChart) {
+        predictionsChart.destroy();
+        predictionsChart = null;
+      }
+
+      const ctx = document.getElementById('prediction-chart').getContext('2d');
+      predictionsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: 'Correction (km)',
+            data: chartData,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            pointBackgroundColor: '#ffffff',
+            pointRadius: 4,
+            tension: 0.1,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#ffffff', font: { family: 'Arial', size: 12 } }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#a0a0b0', font: { family: 'Arial', size: 10 } },
+              grid: { color: '#3e3e4f' }
+            },
+            y: {
+              ticks: { color: '#a0a0b0', font: { family: 'Arial', size: 10 } },
+              grid: { color: '#3e3e4f' }
+            }
+          }
+        }
+      });
+
+      // Table mapping
+      const tbody = document.getElementById('trajectory-table-body');
+      tbody.innerHTML = '';
+      data.trajectory.forEach(pt => {
+        const horizonStr = pt.offset_hours < 168 ? `+${pt.offset_hours}h` : `+${Math.round(pt.offset_hours/24)}d`;
+        tbody.innerHTML += `
+          <tr>
+            <td>${horizonStr}</td>
+            <td>${pt.epoch_utc.replace('T', ' ').replace('Z', '')}</td>
+            <td>${pt.lat.toFixed(2)}° / ${pt.lon.toFixed(2)}°</td>
+            <td>${pt.alt.toFixed(1)}</td>
+            <td class="corr-column">${pt.correction_km.toFixed(4)}</td>
+          </tr>
+        `;
+      });
+
+      // Reset collapsible details state
+      const tableWrap = document.getElementById('table-wrap');
+      tableWrap.style.display = 'none';
+      document.getElementById('toggle-table-btn').textContent = 'Show Raw Coordinates';
+
+      document.getElementById('results-block').style.display = 'block';
+    }
+
+    function toggleDetails() {
+      const tableWrap = document.getElementById('table-wrap');
+      const btn = document.getElementById('toggle-table-btn');
+      if (tableWrap.style.display === 'none' || tableWrap.style.display === '') {
+        tableWrap.style.display = 'block';
+        btn.textContent = 'Hide Raw Coordinates';
+      } else {
+        tableWrap.style.display = 'none';
+        btn.textContent = 'Show Raw Coordinates';
+      }
+    }
+
+    /* ==========================================================================
+       LIGHTBOX HANDLERS
+       ========================================================================== */
+    function openLightbox(src) {
+      document.getElementById('lightbox-img').src = src;
+      document.getElementById('lightbox').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+  </script>
+</body>
+</html>

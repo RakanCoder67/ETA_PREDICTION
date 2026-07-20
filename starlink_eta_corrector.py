@@ -94,7 +94,7 @@ def get_rsw_basis(r_pred, v_pred):
 
 class StarlinkETACorrector:
     def __init__(self):
-        self.base_dir = r"c:\Users\Rakan Alghamdi\OneDrive - Lausanne Collegiate School\Documents\ETA_PREDICTION"
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.models_path = os.path.join(self.base_dir, 'models', 'sgp4_correction_models.pkl')
         self.features_path = os.path.join(self.base_dir, 'models', 'model_features.pkl')
         self.sw_path = os.path.join(self.base_dir, 'compiled_recent_1m.csv')
@@ -281,7 +281,7 @@ class StarlinkETACorrector:
         return r_corrected, v_pred, info
 
 def test_on_satellites(norad_ids=None, max_samples=50):
-    base_dir = r"c:\Users\Rakan Alghamdi\OneDrive - Lausanne Collegiate School\Documents\ETA_PREDICTION"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     tle_path = os.path.join(base_dir, 'data', 'starlink_history.csv')
     
     if not os.path.exists(tle_path):
@@ -441,7 +441,7 @@ def main():
         corrector = StarlinkETACorrector()
         
         # Load satellite TLE
-        base_dir = r"c:\Users\Rakan Alghamdi\OneDrive - Lausanne Collegiate School\Documents\ETA_PREDICTION"
+        base_dir = os.path.dirname(os.path.abspath(__file__))
         tle_path = os.path.join(base_dir, 'data', 'starlink_history.csv')
         if not os.path.exists(tle_path):
             print("Error: TLE history not found. Run fetch_live_data.py first.")

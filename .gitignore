@@ -1,9 +1,9 @@
 __pycache__/
 *.pyc
 
+# Ignore giant dataset files that exceed GitHub/Render limits
 ml_training_dataset.csv
-compiled_historical_daily.csv
-compiled_recent_1m.csv
+data/starlink_history.csv
+starlink_history.csv
 
-data/
-models/
+# Keep models/ and sample data files so Render can load them
