@@ -274,7 +274,7 @@ class StarlinkETACorrector:
         dr_cross = raw_cross * time_scale
 
         # Physical upper bound cap on magnitude based on time horizon to avoid unphysical outliers
-        max_allowed_km = max(0.02, 0.025 * dt_hours) if dt_hours <= 24.0 else (0.6 + 0.015 * dt_hours)
+        max_allowed_km = (0.025 * dt_hours) if dt_hours <= 24.0 else (0.6 + 0.015 * dt_hours)
         total_mag = float(np.sqrt(dr_radial**2 + dr_along**2 + dr_cross**2))
         if total_mag > max_allowed_km and total_mag > 0:
             scale = max_allowed_km / total_mag
