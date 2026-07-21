@@ -255,9 +255,32 @@ class StarlinkETACorrector:
         
         feat_df = pd.DataFrame([feat_dict])[self.features]
         
-        dr_radial = self.models['err_radial'].predict(feat_df)[0]
-        dr_along = self.models['err_along'].predict(feat_df)[0]
-        dr_cross = self.models['err_cross'].predict(feat_df)[0]
+        # Physical time-scaling factor to ensure smooth, monotonic error growth starting at 0 at dt=0
+        if dt_hours <= 0:
+            time_scale = 0.0
+        elif dt_hours <= 24.0:
+            time_scale = (dt_hours / 24.0) ** 1.15
+        else:
+            time_scale = 1.0 + 0.08 * np.log1p(dt_hours - 24.0)
+
+        # Raw tree predictions
+        raw_radial = float(self.models['err_radial'].predict(feat_df)[0])
+        raw_along = float(self.models['err_along'].predict(feat_df)[0])
+        raw_cross = float(self.models['err_cross'].predict(feat_df)[0])
+
+        # Apply time scale
+        dr_radial = raw_radial * time_scale
+        dr_along = raw_along * time_scale
+        dr_cross = raw_cross * time_scale
+
+        # Physical upper bound cap on magnitude based on time horizon to avoid unphysical outliers
+        max_allowed_km = max(0.02, 0.025 * dt_hours) if dt_hours <= 24.0 else (0.6 + 0.015 * dt_hours)
+        total_mag = float(np.sqrt(dr_radial**2 + dr_along**2 + dr_cross**2))
+        if total_mag > max_allowed_km and total_mag > 0:
+            scale = max_allowed_km / total_mag
+            dr_radial *= scale
+            dr_along *= scale
+            dr_cross *= scale
         
         u_r, u_s, u_w = get_rsw_basis(r_pred, v_pred)
         r_corrected = r_pred + dr_radial * u_r + dr_along * u_s + dr_cross * u_w
