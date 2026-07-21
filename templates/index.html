@@ -449,7 +449,7 @@
         <button class="sat-btn" onclick="selectSat(65676)">STARLINK-5201 (65676)</button>
       </div>
 
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom: 10px;">
         <div class="input-field">
           <input
             type="number"
@@ -460,6 +460,19 @@
           />
         </div>
         <button id="predict-btn" class="btn-run" onclick="runPrediction()">Run Correction</button>
+      </div>
+
+      <div class="form-group">
+        <div class="input-field">
+          <input
+            type="number"
+            id="custom-hours-input"
+            placeholder="Optional: Enter specific time horizon in hours (e.g. 15.5, 37, 100)"
+            step="any"
+            min="0.1"
+            autocomplete="off"
+          />
+        </div>
       </div>
 
       <!-- Loading and Error indicators -->
@@ -485,6 +498,13 @@
             <span id="summary-sat-badge" class="status-badge badge-out">—</span>
             <div style="font-size: 11px; color: #808090; margin-top: 4px;">High atmospheric drag zone near equator</div>
           </div>
+        </div>
+
+        <!-- Custom Target Highlight Card (shows when custom time is specified) -->
+        <div id="custom-target-card" style="display: none; background-color: rgba(56, 189, 248, 0.08); border: 1px solid #38bdf8; border-radius: 6px; padding: 12px 15px; margin-bottom: 20px;">
+          <div style="font-size: 12px; color: #38bdf8; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Hyper-Specific Time Target</div>
+          <div style="font-size: 18px; font-weight: bold; color: #ffffff;" id="custom-target-title">+0 Hours</div>
+          <div style="font-size: 13px; color: #b0b0c0; margin-top: 4px;" id="custom-target-details">—</div>
         </div>
 
         <div class="chart-box">
@@ -621,6 +641,10 @@
       if (e.key === 'Enter') runPrediction();
     });
 
+    document.getElementById('custom-hours-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') runPrediction();
+    });
+
     async function runPrediction() {
       const inputVal = document.getElementById('norad-input').value.trim();
       if (!inputVal) return;
@@ -631,16 +655,24 @@
         return;
       }
 
+      const customHoursInput = document.getElementById('custom-hours-input').value.trim();
+      const customHours = customHoursInput ? parseFloat(customHoursInput) : null;
+
       document.getElementById('predict-btn').disabled = true;
       document.getElementById('loading-spinner').style.display = 'block';
       document.getElementById('error-message').style.display = 'none';
       document.getElementById('results-block').style.display = 'none';
 
       try {
+        const reqBody = { norad_id: noradId };
+        if (customHours !== null && !isNaN(customHours) && customHours > 0) {
+          reqBody.custom_hours = customHours;
+        }
+
         const res = await fetch('/predict', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ norad_id: noradId })
+          body: JSON.stringify(reqBody)
         });
 
         if (!res.ok) {
@@ -679,9 +711,31 @@
         badge.textContent = 'Outside Anomaly Region';
       }
 
+      // Custom target card handling
+      const customCard = document.getElementById('custom-target-card');
+      if (data.custom_point) {
+        const cp = data.custom_point;
+        const cpTargetTitle = cp.offset_hours < 168 ? `+${cp.offset_hours} Hours` : `+${(cp.offset_hours/24).toFixed(1)} Days`;
+        document.getElementById('custom-target-title').textContent = `${cpTargetTitle} (${cp.epoch_utc.replace('T', ' ').replace('Z', ' UTC')})`;
+        document.getElementById('custom-target-details').innerHTML = `
+          <strong>Position Fixed by ML:</strong> <span style="color: #34d399;">${cp.correction_km.toFixed(4)} km</span> &nbsp;|&nbsp;
+          <strong>Location:</strong> ${cp.lat.toFixed(2)}° / ${cp.lon.toFixed(2)}° &nbsp;|&nbsp;
+          <strong>Altitude:</strong> ${cp.alt.toFixed(1)} km &nbsp;|&nbsp;
+          <strong>ETA Status:</strong> ${cp.in_eta ? '<span style="color:#fbbf24;">Inside Anomaly</span>' : 'Outside Anomaly'}
+        `;
+        customCard.style.display = 'block';
+      } else {
+        customCard.style.display = 'none';
+      }
+
       // Chart mapping
-      const chartLabels = data.trajectory.map(p => p.offset_hours < 168 ? `+${p.offset_hours}h` : `+${Math.round(p.offset_hours/24)}d`);
+      const chartLabels = data.trajectory.map(p => {
+        const prefix = p.is_custom ? '★ +' : '+';
+        return p.offset_hours < 168 ? `${prefix}${p.offset_hours}h` : `${prefix}${Number((p.offset_hours/24).toFixed(1))}d`;
+      });
       const chartData = data.trajectory.map(p => p.correction_km);
+      const pointColors = data.trajectory.map(p => p.is_custom ? '#fbbf24' : '#ffffff');
+      const pointRadii = data.trajectory.map(p => p.is_custom ? 7 : 4);
 
       if (predictionsChart) {
         predictionsChart.destroy();
@@ -699,8 +753,8 @@
             borderColor: '#3b82f6',
             backgroundColor: 'rgba(59, 130, 246, 0.1)',
             borderWidth: 2,
-            pointBackgroundColor: '#ffffff',
-            pointRadius: 4,
+            pointBackgroundColor: pointColors,
+            pointRadius: pointRadii,
             tension: 0.1,
             fill: true
           }]
@@ -730,10 +784,13 @@
       const tbody = document.getElementById('trajectory-table-body');
       tbody.innerHTML = '';
       data.trajectory.forEach(pt => {
-        const horizonStr = pt.offset_hours < 168 ? `+${pt.offset_hours} Hours` : `+${Math.round(pt.offset_hours/24)} Days`;
+        const horizonStr = pt.offset_hours < 168 ? `+${pt.offset_hours} Hours` : `+${Number((pt.offset_hours/24).toFixed(1))} Days`;
+        const rowStyle = pt.is_custom ? 'background-color: rgba(251, 191, 36, 0.15); font-weight: bold;' : '';
+        const customBadge = pt.is_custom ? ' <span style="color:#fbbf24; font-size:10px;">(Custom Target)</span>' : '';
+
         tbody.innerHTML += `
-          <tr>
-            <td><strong>${horizonStr}</strong></td>
+          <tr style="${rowStyle}">
+            <td><strong>${horizonStr}</strong>${customBadge}</td>
             <td>${pt.epoch_utc.replace('T', ' ').replace('Z', '')}</td>
             <td>${pt.lat.toFixed(2)}° / ${pt.lon.toFixed(2)}°</td>
             <td>${pt.alt.toFixed(1)} km</td>

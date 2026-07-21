@@ -58,6 +58,7 @@ except Exception as ex:
 # ---------------------------------------------------------------------------
 class PredictRequest(BaseModel):
     norad_id: int
+    custom_hours: float | None = None
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -149,8 +150,14 @@ async def predict(req: PredictRequest):
         in_eta_now = False
 
     # Build trajectory: key horizons
-    HORIZONS_H = [24, 48, 72, 168, 360, 720]  # hours
+    base_horizons = [24.0, 48.0, 72.0, 168.0, 360.0, 720.0]
+    if req.custom_hours is not None and req.custom_hours > 0:
+        base_horizons.append(float(req.custom_hours))
+    
+    # Sort unique horizons
+    HORIZONS_H = sorted(list(set(base_horizons)))
     trajectory = []
+    custom_point = None
 
     for h in HORIZONS_H:
         t_target = tle_epoch.to_pydatetime() + timedelta(hours=h)
@@ -177,8 +184,10 @@ async def predict(req: PredictRequest):
         in_eta = bool(info.get("in_eta", False))
         correction_km = float(np.linalg.norm(r_ml - r_sgp4))
 
-        trajectory.append({
-            "offset_hours": int(h),
+        is_custom = bool(req.custom_hours is not None and abs(float(h) - float(req.custom_hours)) < 1e-4)
+
+        pt_data = {
+            "offset_hours": round(float(h), 2) if not float(h).is_integer() else int(h),
             "epoch_utc": t_target.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "sgp4": [round(float(r_sgp4[0]), 3), round(float(r_sgp4[1]), 3), round(float(r_sgp4[2]), 3)],
             "ml_corrected": [round(float(r_ml[0]), 3), round(float(r_ml[1]), 3), round(float(r_ml[2]), 3)],
@@ -188,7 +197,12 @@ async def predict(req: PredictRequest):
             "mag_lat": round(float(mag_lat), 3),
             "in_eta": bool(in_eta),
             "correction_km": round(float(correction_km), 4),
-        })
+            "is_custom": is_custom,
+        }
+
+        trajectory.append(pt_data)
+        if is_custom:
+            custom_point = pt_data
 
     return JSONResponse(content={
         "satellite_name": sat_name,
@@ -196,5 +210,6 @@ async def predict(req: PredictRequest):
         "tle_epoch": tle_epoch_str,
         "space_weather": space_weather,
         "in_eta_now": bool(in_eta_now),
+        "custom_point": custom_point,
         "trajectory": trajectory,
     })
