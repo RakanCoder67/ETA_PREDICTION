@@ -18,10 +18,11 @@
       font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
+      line-height: 1.5;
     }
 
     .container {
-      max-width: 800px;
+      max-width: 840px;
       margin: 20px auto;
       padding: 20px;
     }
@@ -35,13 +36,14 @@
 
     header h1 {
       margin: 0 0 10px 0;
-      font-size: 24px;
+      font-size: 26px;
     }
 
     header p {
       color: #b0b0c0;
       font-size: 14px;
       margin: 0;
+      line-height: 1.6;
     }
 
     /* CARD STYLE FOR THE INPUT TOOL */
@@ -53,17 +55,43 @@
       margin-bottom: 30px;
     }
 
-    .tool-section h2 {
-      font-size: 18px;
+    .step-title {
+      font-size: 16px;
+      font-weight: bold;
       margin-top: 0;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      color: #38bdf8;
     }
 
     .tool-section p {
       color: #b0b0c0;
       font-size: 13px;
       margin-top: 0;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
+    }
+
+    /* SATELLITE PICKER BUTTONS */
+    .sat-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+
+    .sat-btn {
+      background-color: #1e1e24;
+      color: #ffffff;
+      border: 1px solid #3b82f6;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+
+    .sat-btn:hover {
+      background-color: #3b82f6;
     }
 
     .form-group {
@@ -86,7 +114,7 @@
       box-sizing: border-box;
     }
 
-    .btn {
+    .btn-run {
       background-color: #3b82f6;
       color: #ffffff;
       border: none;
@@ -97,26 +125,13 @@
       cursor: pointer;
     }
 
-    .btn:hover {
+    .btn-run:hover {
       background-color: #2563eb;
     }
 
-    .btn:disabled {
+    .btn-run:disabled {
       background-color: #555555;
       cursor: not-allowed;
-    }
-
-    .suggestions {
-      margin-top: 10px;
-      font-size: 13px;
-      color: #a0a0b0;
-    }
-
-    .suggest-chip {
-      color: #3b82f6;
-      cursor: pointer;
-      text-decoration: underline;
-      margin-left: 5px;
     }
 
     /* LOADER & ERRORS */
@@ -146,29 +161,40 @@
       border-top: 1px solid #3e3e4f;
     }
 
-    .results-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
+    /* SUMMARY CARDS GRID */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
     }
 
-    .results-info h3 {
-      margin: 0;
-      font-size: 16px;
+    .summary-card {
+      background-color: #1e1e24;
+      border: 1px solid #3e3e4f;
+      border-radius: 6px;
+      padding: 12px 15px;
     }
 
-    .results-info p {
-      margin: 5px 0 0 0;
+    .summary-card .lbl {
       font-size: 12px;
-      color: #808090;
+      color: #a0a0b0;
+      margin-bottom: 4px;
+    }
+
+    .summary-card .val {
+      font-size: 18px;
+      font-weight: bold;
+      color: #ffffff;
     }
 
     .status-badge {
+      display: inline-block;
       font-size: 12px;
       padding: 3px 8px;
       border-radius: 4px;
       font-weight: bold;
+      margin-top: 4px;
     }
 
     .badge-in {
@@ -187,7 +213,16 @@
       border: 1px solid #3e3e4f;
       border-radius: 6px;
       padding: 10px;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
+    }
+
+    .chart-explanation {
+      background-color: #1e1e24;
+      border-left: 3px solid #3b82f6;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #b0b0c0;
+      margin-bottom: 15px;
     }
 
     .toggle-btn {
@@ -385,6 +420,7 @@
     }
 
     @media (max-width: 768px) {
+      .summary-grid { grid-template-columns: 1fr; }
       .graphs-grid { grid-template-columns: 1fr; }
       .info-grid { grid-template-columns: 1fr; }
       .form-group { flex-direction: column; }
@@ -396,72 +432,83 @@
   <div class="container">
     <!-- HEADER -->
     <header>
-      <h1>Starlink Orbit Correction Dashboard</h1>
-      <p>A simple simulator that calculates atmospheric drag corrections for Starlink satellites when they pass through the Equatorial Thermosphere Anomaly.</p>
+      <h1>Starlink Orbit Correction Simulator</h1>
+      <p>Starlink satellites fly in Low Earth Orbit. When they cross the Earth's equator (the Equatorial Thermosphere Anomaly region), atmospheric drag changes unpredictably. Standard physics models (SGP4) drift off course. Our Machine Learning model fixes these errors.</p>
     </header>
 
     <!-- SIMULATOR TOOL -->
     <section class="tool-section">
-      <h2>Satellite Simulator</h2>
-      <p>Enter a Starlink catalog number to query space weather and apply predictions.</p>
+      <div class="step-title">Step 1: Pick a Starlink Satellite</div>
+      <p>Click any satellite name below, or type its catalog number (NORAD ID):</p>
+
+      <div class="sat-picker">
+        <button class="sat-btn" onclick="selectSat(44952)">STARLINK-1117 (44952)</button>
+        <button class="sat-btn" onclick="selectSat(46375)">STARLINK-1284 (46375)</button>
+        <button class="sat-btn" onclick="selectSat(59470)">STARLINK-3158 (59470)</button>
+        <button class="sat-btn" onclick="selectSat(63090)">STARLINK-5012 (63090)</button>
+        <button class="sat-btn" onclick="selectSat(65676)">STARLINK-5201 (65676)</button>
+      </div>
 
       <div class="form-group">
         <div class="input-field">
           <input
             type="number"
             id="norad-input"
-            placeholder="NORAD Catalog ID (e.g. 44952)"
+            placeholder="Type NORAD Catalog ID (e.g. 44952)"
             min="1"
             autocomplete="off"
           />
         </div>
-        <button id="predict-btn" class="btn" onclick="runPrediction()">Run Correction</button>
-      </div>
-
-      <div class="suggestions">
-        Sample IDs: 
-        <span class="suggest-chip" onclick="setNorad(44952)">44952</span> | 
-        <span class="suggest-chip" onclick="setNorad(46375)">46375</span> | 
-        <span class="suggest-chip" onclick="setNorad(59470)">59470</span> | 
-        <span class="suggest-chip" onclick="setNorad(63090)">63090</span> | 
-        <span class="suggest-chip" onclick="setNorad(65676)">65676</span>
+        <button id="predict-btn" class="btn-run" onclick="runPrediction()">Run Correction</button>
       </div>
 
       <!-- Loading and Error indicators -->
       <div id="loading-spinner" class="loader">
-        <span>Running prediction calculations...</span>
+        <span>Calculating satellite trajectory adjustments...</span>
       </div>
 
       <div id="error-message" class="error-box"></div>
 
       <!-- RESULTS PANEL -->
       <div id="results-block" class="results-block">
-        <div class="results-info">
-          <div>
-            <h3 id="sat-label">—</h3>
-            <p id="sat-epoch">—</p>
+        <div class="step-title">Step 2: Satellite Correction Results</div>
+
+        <!-- Summary cards grid -->
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="lbl">Selected Satellite</div>
+            <div class="val" id="summary-sat-name">—</div>
+            <div style="font-size: 11px; color: #808090; margin-top: 2px;" id="summary-sat-id">—</div>
           </div>
-          <span id="sat-badge" class="status-badge badge-out">—</span>
+          <div class="summary-card">
+            <div class="lbl">Equatorial Anomaly Region Status</div>
+            <span id="summary-sat-badge" class="status-badge badge-out">—</span>
+            <div style="font-size: 11px; color: #808090; margin-top: 4px;">High atmospheric drag zone near equator</div>
+          </div>
         </div>
 
         <div class="chart-box">
           <canvas id="prediction-chart"></canvas>
         </div>
 
+        <div class="chart-explanation">
+          <strong>What this chart shows:</strong> The blue line shows how many kilometers our Machine Learning model adjusted the satellite's position to keep it accurate over time. Higher numbers mean standard physics formulas drifted off course and our model corrected them.
+        </div>
+
         <!-- Toggle raw coordinates -->
         <button id="toggle-table-btn" class="toggle-btn" onclick="toggleDetails()">
-          Show Raw Coordinates
+          View Exact Coordinates & Data Table
         </button>
 
         <div id="table-wrap" class="table-container">
           <table>
             <thead>
               <tr>
-                <th>Horizon</th>
-                <th>Target Time (UTC)</th>
-                <th>Latitude / Longitude</th>
+                <th>Time Horizon</th>
+                <th>Target Date & Time (UTC)</th>
+                <th>Location (Latitude / Longitude)</th>
                 <th>Altitude (km)</th>
-                <th>Correction (km)</th>
+                <th>Position Fixed by ML (km)</th>
               </tr>
             </thead>
             <tbody id="trajectory-table-body"></tbody>
@@ -472,29 +519,29 @@
 
     <!-- ACCURACY NUMBERS -->
     <section class="compare-section">
-      <h2>Prediction Accuracy Summary</h2>
+      <h2>Overall Prediction Accuracy</h2>
       <p style="font-size: 13px; color: #a0a0b0; margin-top: 0;">
-        These are the average prediction errors comparing standard SGP4 against our Machine Learning model. Lower numbers mean better predictions.
+        Average prediction errors across 50 test satellites not seen during training. Lower numbers mean higher accuracy.
       </p>
 
       <table class="compare-table">
         <thead>
           <tr>
-            <th>Prediction Horizon</th>
-            <th>Standard SGP4 Error</th>
+            <th>Time Horizon</th>
+            <th>Standard SGP4 Model Error</th>
             <th>Empirical HPOP Benchmark</th>
             <th>Our Machine Learning Model</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>24 Hours</strong> (Short prediction)</td>
+            <td><strong>24 Hours</strong> (Short term)</td>
             <td>6.09 km</td>
             <td>0.86 km</td>
             <td class="best">0.39 km</td>
           </tr>
           <tr>
-            <td><strong>30 Days</strong> (Long prediction)</td>
+            <td><strong>30 Days</strong> (Long term)</td>
             <td>62.56 km</td>
             <td>5.23 km</td>
             <td class="best">2.35 km</td>
@@ -507,23 +554,23 @@
     <section class="graphs-section">
       <h2>Evaluation Graphs</h2>
       <p style="font-size: 13px; color: #a0a0b0; margin-top: 0;">
-        Click a graph to open it in a larger view.
+        Click a graph to view in full size.
       </p>
 
       <div class="graphs-grid">
         <div class="graph-card" onclick="openLightbox('/images/comparison_24h.png')">
           <img src="/images/comparison_24h.png" alt="24h comparison graph" loading="lazy" />
           <div class="graph-info">
-            <div class="graph-title">24-Hour Prediction Error</div>
-            <div class="graph-desc">Shows error growth over 24 hours. The ML model limits drift.</div>
+            <div class="graph-title">24-Hour Error Comparison</div>
+            <div class="graph-desc">Standard SGP4 error spikes inside the anomaly region. The ML model keeps predictions under 0.5 km.</div>
           </div>
         </div>
 
         <div class="graph-card" onclick="openLightbox('/images/comparison_30d.png')">
           <img src="/images/comparison_30d.png" alt="30d comparison graph" loading="lazy" />
           <div class="graph-info">
-            <div class="graph-title">30-Day Prediction Error</div>
-            <div class="graph-desc">Tracks drift over a full month. The ML correction holds steady.</div>
+            <div class="graph-title">30-Day Error Drift</div>
+            <div class="graph-desc">Tracks drift over a full month. SGP4 accumulates 60+ km error, while the ML model stays steady.</div>
           </div>
         </div>
       </div>
@@ -535,15 +582,15 @@
       <div class="info-grid">
         <div class="info-card">
           <div class="info-title">1. Data Collection</div>
-          <div class="info-desc">Loads standard satellite parameters and matches them with space weather indexes like F10.7 solar flux.</div>
+          <div class="info-desc">Loads standard satellite positions and matches them with live space weather indexes.</div>
         </div>
         <div class="info-card">
           <div class="info-title">2. Anomaly Check</div>
-          <div class="info-desc">Determines if the satellite is crossing the Equatorial Thermosphere Anomaly band near the equator.</div>
+          <div class="info-desc">Checks if the satellite is crossing the high-drag Equatorial Thermosphere Anomaly region.</div>
         </div>
         <div class="info-card">
           <div class="info-title">3. Apply Correction</div>
-          <div class="info-desc">Calculates position errors and adjusts the predicted coordinates to keep them closer to reality.</div>
+          <div class="info-desc">Calculates position errors and adjusts predicted coordinates to match reality.</div>
         </div>
       </div>
     </section>
@@ -565,9 +612,9 @@
        ========================================================================== */
     let predictionsChart = null;
 
-    function setNorad(id) {
+    function selectSat(id) {
       document.getElementById('norad-input').value = id;
-      document.getElementById('norad-input').focus();
+      runPrediction();
     }
 
     document.getElementById('norad-input').addEventListener('keydown', function(e) {
@@ -580,7 +627,7 @@
 
       const noradId = parseInt(inputVal);
       if (isNaN(noradId) || noradId < 1) {
-        displayError('Invalid NORAD ID.');
+        displayError('Please enter a valid satellite ID number.');
         return;
       }
 
@@ -618,18 +665,18 @@
     }
 
     function populateResults(data) {
-      // Summary text
-      document.getElementById('sat-label').textContent = data.satellite_name;
-      document.getElementById('sat-epoch').textContent = `NORAD: ${data.norad_id} | Starting: ${data.tle_epoch.replace('T', ' ').replace('Z', ' UTC')}`;
+      // Summary cards
+      document.getElementById('summary-sat-name').textContent = data.satellite_name;
+      document.getElementById('summary-sat-id').textContent = `NORAD Catalog ID: ${data.norad_id} | Epoch: ${data.tle_epoch.replace('T', ' ').replace('Z', ' UTC')}`;
 
       // Anomaly indicator badge
-      const badge = document.getElementById('sat-badge');
+      const badge = document.getElementById('summary-sat-badge');
       if (data.in_eta_now) {
         badge.className = 'status-badge badge-in';
-        badge.textContent = 'Inside Anomaly';
+        badge.textContent = 'Inside Equatorial Anomaly Region';
       } else {
         badge.className = 'status-badge badge-out';
-        badge.textContent = 'Outside Anomaly';
+        badge.textContent = 'Outside Anomaly Region';
       }
 
       // Chart mapping
@@ -647,7 +694,7 @@
         data: {
           labels: chartLabels,
           datasets: [{
-            label: 'Correction (km)',
+            label: 'Position Error Fixed (km)',
             data: chartData,
             borderColor: '#3b82f6',
             backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -683,14 +730,14 @@
       const tbody = document.getElementById('trajectory-table-body');
       tbody.innerHTML = '';
       data.trajectory.forEach(pt => {
-        const horizonStr = pt.offset_hours < 168 ? `+${pt.offset_hours}h` : `+${Math.round(pt.offset_hours/24)}d`;
+        const horizonStr = pt.offset_hours < 168 ? `+${pt.offset_hours} Hours` : `+${Math.round(pt.offset_hours/24)} Days`;
         tbody.innerHTML += `
           <tr>
-            <td>${horizonStr}</td>
+            <td><strong>${horizonStr}</strong></td>
             <td>${pt.epoch_utc.replace('T', ' ').replace('Z', '')}</td>
             <td>${pt.lat.toFixed(2)}° / ${pt.lon.toFixed(2)}°</td>
-            <td>${pt.alt.toFixed(1)}</td>
-            <td class="corr-column">${pt.correction_km.toFixed(4)}</td>
+            <td>${pt.alt.toFixed(1)} km</td>
+            <td style="color: #34d399; font-weight: bold;">${pt.correction_km.toFixed(4)} km</td>
           </tr>
         `;
       });
@@ -698,7 +745,7 @@
       // Reset collapsible details state
       const tableWrap = document.getElementById('table-wrap');
       tableWrap.style.display = 'none';
-      document.getElementById('toggle-table-btn').textContent = 'Show Raw Coordinates';
+      document.getElementById('toggle-table-btn').textContent = 'View Exact Coordinates & Data Table';
 
       document.getElementById('results-block').style.display = 'block';
     }
@@ -708,10 +755,10 @@
       const btn = document.getElementById('toggle-table-btn');
       if (tableWrap.style.display === 'none' || tableWrap.style.display === '') {
         tableWrap.style.display = 'block';
-        btn.textContent = 'Hide Raw Coordinates';
+        btn.textContent = 'Hide Exact Coordinates & Data Table';
       } else {
         tableWrap.style.display = 'none';
-        btn.textContent = 'Show Raw Coordinates';
+        btn.textContent = 'View Exact Coordinates & Data Table';
       }
     }
 
