@@ -59,6 +59,7 @@ except Exception as ex:
 class PredictRequest(BaseModel):
     norad_id: int
     custom_hours: float | None = None
+    live_mode: bool = False
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -138,9 +139,10 @@ async def predict(req: PredictRequest):
         "Dst": float(sw_snap.get("Dst", 0.0)),
     }
 
-    # Check ETA status at epoch
+    # Check ETA status at epoch (or NOW in live mode)
     try:
-        jd0, fr0 = datetime_to_jd(tle_epoch.to_pydatetime())
+        ref_time = now_utc if req.live_mode else tle_epoch.to_pydatetime()
+        jd0, fr0 = datetime_to_jd(ref_time)
         _, r0, v0 = satrec.sgp4(jd0, fr0)
         lat0, lon0, alt0 = teme_to_geodetic(np.array(r0), jd0, fr0)
         from starlink_eta_corrector import get_geomagnetic_latitude
@@ -150,7 +152,11 @@ async def predict(req: PredictRequest):
         in_eta_now = False
 
     # Build trajectory: key horizons
-    base_horizons = [24.0, 48.0, 72.0, 168.0, 360.0, 720.0]
+    if req.live_mode:
+        base_horizons = [0.0, 24.0, 48.0, 72.0, 168.0, 360.0, 720.0]
+    else:
+        base_horizons = [24.0, 48.0, 72.0, 168.0, 360.0, 720.0]
+
     if req.custom_hours is not None and req.custom_hours > 0:
         base_horizons.append(float(req.custom_hours))
     
@@ -160,7 +166,11 @@ async def predict(req: PredictRequest):
     custom_point = None
 
     for h in HORIZONS_H:
-        t_target = tle_epoch.to_pydatetime() + timedelta(hours=h)
+        if req.live_mode:
+            t_target = now_utc + timedelta(hours=h)
+        else:
+            t_target = tle_epoch.to_pydatetime() + timedelta(hours=h)
+
         jd, fr = datetime_to_jd(t_target)
 
         # SGP4 baseline
@@ -170,7 +180,7 @@ async def predict(req: PredictRequest):
 
         r_sgp4 = np.array(r_sgp4)
 
-        # ML corrected
+        # ML corrected (always propagate relative to standard start_epoch so BSTAR/time drift is model-consistent)
         try:
             r_ml, _, info = corrector.propagate_and_correct(satrec, tle_epoch.to_pydatetime(), t_target)
         except Exception:
@@ -211,5 +221,6 @@ async def predict(req: PredictRequest):
         "space_weather": space_weather,
         "in_eta_now": bool(in_eta_now),
         "custom_point": custom_point,
+        "live_mode": bool(req.live_mode),
         "trajectory": trajectory,
     })
