@@ -130,23 +130,61 @@ def run_propagation():
                 if err_sgp4 < 1200.0 and err_ml < 1200.0:
                     sgp4_errors[t].append(err_sgp4)
                     
-                    final_ml_err = min(err_ml, 0.015 + 0.012 * t + np.random.normal(0, 0.005 * (1.0 + t/100.0)))
-                    final_ml_err = max(final_ml_err, 0.01)
-                    
-                    ml_errors[t].append(final_ml_err)
+                    ml_errors[t].append(err_ml)
                     hpop_errors[t].append(hpop_err)
             except:
                 pass
+
+    # ------------------------------------------------------------------
+    # ML line: use real validated pair errors from evaluation_dataset.csv
+    # (median per dt-hour bin), interpolated + lightly smoothed.
+    # SGP4 and HPOP lines come directly from the propagation above.
+    # ------------------------------------------------------------------
+    EVAL_CSV = os.path.join(BASE_DIR, "models", "evaluation_dataset.csv")
+    eval_df = pd.read_csv(EVAL_CSV)
+    eval_df["dt_hours"]    = pd.to_numeric(eval_df["dt_hours"],    errors="coerce")
+    eval_df["ml_error_3d"] = pd.to_numeric(eval_df["ml_error_3d"], errors="coerce")
+    eval_df = eval_df.dropna(subset=["dt_hours", "ml_error_3d"])
+    eval_df = eval_df[eval_df["ml_error_3d"] < 2000]
+    eval_df["dt_bin"] = eval_df["dt_hours"].round(0).astype(int)
+    ml_real = eval_df.groupby("dt_bin")["ml_error_3d"].median()
+
+    def smooth(arr, w=5):
+        arr = np.array(arr, dtype=float)
+        out = np.convolve(arr, np.ones(w) / w, mode='same')
+        for i in range(w // 2):
+            out[i]      = np.mean(arr[:i + 1])
+            out[-(i+1)] = np.mean(arr[-(i+1):])
+        return out
 
     t_plot, s_plot, m_plot, h_plot = [], [], [], []
     for t in steps:
         if len(sgp4_errors[t]) > 0:
             t_plot.append(t)
             s_plot.append(np.mean(sgp4_errors[t]))
-            m_plot.append(np.mean(ml_errors[t]))
             h_plot.append(np.mean(hpop_errors[t]))
+            # Real ML error: median from evaluation pairs, interpolated
+            if t in ml_real.index:
+                m_plot.append(float(ml_real[t]))
+            else:
+                below = ml_real.index[ml_real.index <= t]
+                above = ml_real.index[ml_real.index >= t]
+                if len(below) > 0 and len(above) > 0:
+                    t0, t1 = below[-1], above[0]
+                    if t0 == t1:
+                        m_plot.append(float(ml_real[t0]))
+                    else:
+                        v0, v1 = float(ml_real[t0]), float(ml_real[t1])
+                        m_plot.append(v0 + (v1 - v0) * (t - t0) / (t1 - t0))
+                elif len(below) > 0:
+                    m_plot.append(float(ml_real[below[-1]]))
+                else:
+                    m_plot.append(float(ml_real[above[0]]))
 
-    return np.array(t_plot), np.array(s_plot), np.array(m_plot), np.array(h_plot)
+    return (np.array(t_plot),
+            smooth(np.array(s_plot), w=3),
+            smooth(np.array(m_plot), w=5),
+            smooth(np.array(h_plot), w=3))
 
 def plot_and_save(t, s, m, h, window_h, filename, title):
     idx = t <= window_h
