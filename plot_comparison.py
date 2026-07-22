@@ -204,6 +204,9 @@ def collect_pair_errors(tle_df, corrector, max_sats=None, seed=42):
 
             sw = corrector.get_space_weather_at(rowB["EPOCH"])
 
+            # Physics-informed features
+            exp_alt = np.exp(-alt / 50.0)
+
             feat = {
                 "dt_hours":          dt_h,
                 "BSTAR":             srA.bstar,
@@ -224,6 +227,11 @@ def collect_pair_errors(tle_df, corrector, max_sats=None, seed=42):
                 "solar_cycle_phase": sw["solar_cycle_phase"],
                 "Xray_short":        sw["Xray_short"],
                 "Xray_long":         sw["Xray_long"],
+                "exp_alt_factor":          exp_alt,
+                "solar_heating_int":       sw["F107"] * exp_alt,
+                "geomagnetic_heating_int":  sw["Ap"] * exp_alt,
+                "eta_heating_int":         eta_intens * sw["F107"] * exp_alt,
+                "time_along_track_drag":   dt_h * srA.bstar * sw["F107"] * exp_alt,
             }
 
             raw.append({

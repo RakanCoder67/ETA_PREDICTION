@@ -121,8 +121,10 @@ class StarlinkETACorrector:
             self.sw_df = pd.read_csv(self.sw_path)
             self.sw_df['Datetime'] = pd.to_datetime(self.sw_df['Datetime'], utc=True)
             self.sw_df.set_index('Datetime', inplace=True)
+            self.sw_dict = self.sw_df.to_dict(orient='index')
         else:
             print("Warning: Space weather data not found! Run fetch_live_data.py first.")
+            self.sw_dict = None
             
         if os.path.exists(self.hist_path):
             print("Loading historical daily space weather for TLE overlap fallback...")
@@ -153,6 +155,7 @@ class StarlinkETACorrector:
             hist['Xray_short'] = 1e-7
             hist['Xray_long']  = 1e-7
             self.sw_hist = hist
+            self.sw_hist_dict = hist.to_dict(orient='index')
 
     def get_space_weather_at(self, target_time):
         target_dt = pd.to_datetime(target_time, utc=True)
@@ -162,9 +165,9 @@ class StarlinkETACorrector:
         else:
             date_key_naive = date_key
 
-        # First try historical daily fallback if it is a past date
-        if self.sw_hist is not None and date_key_naive in self.sw_hist.index:
-            row = self.sw_hist.loc[date_key_naive]
+        # First try historical daily fallback dictionary
+        if hasattr(self, 'sw_hist_dict') and self.sw_hist_dict is not None and date_key_naive in self.sw_hist_dict:
+            row = self.sw_hist_dict[date_key_naive]
             return {
                 'Ap': float(row.get('Ap', 7.0)),
                 'F107': float(row.get('F107', 150.0)),
@@ -175,24 +178,31 @@ class StarlinkETACorrector:
                 'Xray_long': 1e-7
             }
             
-        # Try minute resolution if within recent window
-        if self.sw_df is not None:
+        # Try minute resolution dictionary
+        if hasattr(self, 'sw_dict') and self.sw_dict is not None:
             t_min = target_dt.floor('min')
-            if t_min in self.sw_df.index:
-                row = self.sw_df.loc[t_min]
-                if isinstance(row, pd.DataFrame):
-                    row = row.iloc[0]
+            if t_min in self.sw_dict:
+                row = self.sw_dict[t_min]
                 return {
                     'Ap': float(row.get('Ap', 7.0)),
                     'F107': float(row.get('F107', 150.0)),
                     'Kp_index': float(row.get('Kp_index', 2.0)),
                     'Dst': float(row.get('Dst', 0.0)),
                     'solar_cycle_phase': float(row.get('solar_cycle_phase', 0.5) if 'solar_cycle_phase' in row else 0.5),
-                    'Xray_short': float(row.get('Xray_flux_short', 1e-7)),
-                    'Xray_long': float(row.get('Xray_flux_long', 1e-7))
+                    'Xray_short': float(row.get('Xray_short', 1e-7) if 'Xray_short' in row else 1e-7),
+                    'Xray_long': float(row.get('Xray_long', 1e-7) if 'Xray_long' in row else 1e-7)
                 }
             
-        return {'Ap': 7.0, 'F107': 150.0, 'Kp_index': 2.0, 'Dst': 0.0, 'solar_cycle_phase': 0.5, 'Xray_short': 1e-7, 'Xray_long': 1e-7}
+        # Default space weather values if not found in database
+        return {
+            'Ap': 7.0,
+            'F107': 150.0,
+            'Kp_index': 2.0,
+            'Dst': 0.0,
+            'solar_cycle_phase': 0.5,
+            'Xray_short': 1e-7,
+            'Xray_long': 1e-7
+        }
             
     def is_in_eta_region(self, mag_lat, alt):
         return abs(mag_lat) <= 25.0 and alt < 600.0
@@ -252,6 +262,14 @@ class StarlinkETACorrector:
             'Xray_short': sw['Xray_short'],
             'Xray_long': sw['Xray_long']
         }
+        
+        # Physics-informed features
+        exp_alt = np.exp(-alt / 50.0)
+        feat_dict['exp_alt_factor'] = exp_alt
+        feat_dict['solar_heating_int'] = sw['F107'] * exp_alt
+        feat_dict['geomagnetic_heating_int'] = sw['Ap'] * exp_alt
+        feat_dict['eta_heating_int'] = eta_intensity * sw['F107'] * exp_alt
+        feat_dict['time_along_track_drag'] = dt_hours * satrec.bstar * sw['F107'] * exp_alt
         
         feat_df = pd.DataFrame([feat_dict])[self.features]
         

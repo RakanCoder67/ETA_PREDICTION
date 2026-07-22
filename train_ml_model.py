@@ -41,11 +41,19 @@ def main():
     print("Loading training data...")
     df = pd.read_csv(data_path)
     
+    # Physics-informed feature engineering on the fly
+    df['exp_alt_factor'] = np.exp(-df['altitude'] / 50.0)
+    df['solar_heating_int'] = df['F107'] * df['exp_alt_factor']
+    df['geomagnetic_heating_int'] = df['Ap'] * df['exp_alt_factor']
+    df['eta_heating_int'] = df['eta_intensity'] * df['F107'] * df['exp_alt_factor']
+    df['time_along_track_drag'] = df['dt_hours'] * df['BSTAR'] * df['F107'] * df['exp_alt_factor']
+
     features = [
         'dt_hours', 'BSTAR', 'INCLINATION', 'ECCENTRICITY', 
         'altitude', 'latitude', 'longitude', 'magnetic_lat', 'local_time',
         'magnetic_lt', 'eta_intensity', 'in_eta',
-        'Ap', 'F107', 'Kp_index', 'Dst', 'solar_cycle_phase', 'Xray_short', 'Xray_long'
+        'Ap', 'F107', 'Kp_index', 'Dst', 'solar_cycle_phase', 'Xray_short', 'Xray_long',
+        'exp_alt_factor', 'solar_heating_int', 'geomagnetic_heating_int', 'eta_heating_int', 'time_along_track_drag'
     ]
                 
     targets = ['err_radial', 'err_along', 'err_cross']
@@ -87,11 +95,15 @@ def main():
     for target in targets:
         print(f"\nTraining model for {target}...")
         model = xgb.XGBRegressor(
-            n_estimators=1200, 
+            n_estimators=1500, 
             learning_rate=0.015, 
-            max_depth=7,
+            max_depth=8,
             subsample=0.9,
             colsample_bytree=0.9,
+            reg_alpha=0.15,
+            reg_lambda=1.2,
+            early_stopping_rounds=60,
+            tree_method='hist',
             objective='reg:squarederror',
             random_state=42,
             n_jobs=-1
