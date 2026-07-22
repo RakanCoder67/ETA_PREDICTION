@@ -140,9 +140,9 @@ def run_propagation():
     for t in steps:
         if len(sgp4_errors[t]) > 0:
             t_plot.append(t)
-            s_plot.append(np.mean(sgp4_errors[t]))
-            m_plot.append(np.mean(ml_errors[t]))
-            h_plot.append(np.mean(hpop_errors[t]))
+            s_plot.append(np.median(sgp4_errors[t]))
+            m_plot.append(np.median(ml_errors[t]))
+            h_plot.append(np.median(hpop_errors[t]))
 
     return np.array(t_plot), np.array(s_plot), np.array(m_plot), np.array(h_plot)
 
