@@ -562,7 +562,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         <div>
           <div class="step-title">🌏 Satellites Currently Inside the ETA</div>
-          <div style="font-size:12px;color:#808090;margin-top:2px;">Scanned at <span id="eta-checked-at">—</span> UTC &nbsp;·&nbsp; <span id="eta-count" style="color:#fbbf24;font-weight:bold;">0</span> satellite(s) in ETA right now</div>
+          <div style="font-size:12px;color:#808090;margin-top:2px;">Scanned at <span id="eta-checked-at">—</span> UTC &nbsp;·&nbsp; <span id="eta-count" style="color:#fbbf24;font-weight:bold;">0</span> in ETA &nbsp;·&nbsp; <span id="eta-scanned">?</span> satellites scanned &nbsp;·&nbsp; <span id="eta-source" style="color:#a0a0b0;font-size:11px;">—</span></div>
         </div>
         <button class="btn-run" id="eta-refresh-btn" onclick="loadEtaNow()" style="padding:8px 16px;font-size:13px;">🔄 Refresh</button>
       </div>
@@ -726,6 +726,8 @@
         const data = await resp.json();
         document.getElementById('eta-checked-at').textContent = data.checked_at.replace('T',' ').replace('Z','');
         document.getElementById('eta-count').textContent = data.total_in_eta;
+        document.getElementById('eta-scanned').textContent = (data.total_scanned || '?').toLocaleString();
+        document.getElementById('eta-source').textContent = data.tle_source || '';
         const tbody = document.getElementById('eta-table-body');
         tbody.innerHTML = '';
         if (data.total_in_eta === 0) {

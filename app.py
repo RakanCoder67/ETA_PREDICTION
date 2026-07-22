@@ -1,6 +1,9 @@
 import os
+import threading
+import time
 import numpy as np
 import pandas as pd
+import requests
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -31,6 +34,8 @@ HTML_PATH = os.path.join(BASE_DIR, "templates", "index.html")
 corrector = None
 sample_df = None
 available_norads = []
+live_starlink_df = None          # Full live constellation from CelesTrak
+live_starlink_updated_at = None  # Last fetch timestamp
 
 try:
     from starlink_eta_corrector import StarlinkETACorrector, datetime_to_jd, teme_to_geodetic
@@ -52,6 +57,100 @@ try:
         print(f"WARNING: {SAMPLE_CSV} not found.")
 except Exception as ex:
     print(f"WARNING: Could not load sample CSV: {ex}")
+
+# ---------------------------------------------------------------------------
+# Live Starlink TLE fetcher (CelesTrak — no auth required)
+# ---------------------------------------------------------------------------
+CELESTRAK_URL = "https://celestrak.org/SOCRATES/query.php?GROUP=starlink&FORMAT=tle"
+LIVE_TLE_CACHE = os.path.join(BASE_DIR, "data", "starlink_live_tle.txt")
+
+
+def _parse_epoch_from_tle1(line1: str) -> datetime:
+    """Parse the epoch from TLE line 1 into a UTC datetime."""
+    try:
+        epoch_str = line1[18:32].strip()
+        year2 = int(epoch_str[:2])
+        year = 2000 + year2 if year2 < 57 else 1900 + year2
+        day_of_year = float(epoch_str[2:])
+        epoch = datetime(year, 1, 1, tzinfo=timezone.utc) + timedelta(days=day_of_year - 1)
+        return epoch
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def _parse_norad_from_tle1(line1: str) -> int:
+    try:
+        return int(line1[2:7].strip())
+    except Exception:
+        return 0
+
+
+def fetch_live_starlink_tles() -> pd.DataFrame | None:
+    """Download current Starlink TLEs from CelesTrak and return a DataFrame."""
+    global live_starlink_df, live_starlink_updated_at
+    try:
+        print("Fetching live Starlink TLEs from CelesTrak…")
+        resp = requests.get(CELESTRAK_URL, timeout=30)
+        resp.raise_for_status()
+        text = resp.text.strip()
+        # Cache locally for offline fallback
+        os.makedirs(os.path.dirname(LIVE_TLE_CACHE), exist_ok=True)
+        with open(LIVE_TLE_CACHE, "w") as f:
+            f.write(text)
+    except Exception as ex:
+        print(f"WARNING: CelesTrak fetch failed ({ex}). Trying local cache…")
+        if os.path.exists(LIVE_TLE_CACHE):
+            with open(LIVE_TLE_CACHE) as f:
+                text = f.read().strip()
+        else:
+            print("No local cache available. Live ETA scan will use sample DB.")
+            return None
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    rows = []
+    for i in range(0, len(lines) - 2, 3):
+        name = lines[i]
+        l1   = lines[i + 1]
+        l2   = lines[i + 2]
+        if not (l1.startswith('1') and l2.startswith('2')):
+            continue
+        norad  = _parse_norad_from_tle1(l1)
+        epoch  = _parse_epoch_from_tle1(l1)
+        rows.append({
+            "NORAD_CAT_ID": norad,
+            "OBJECT_NAME":  name,
+            "TLE_LINE1":    l1,
+            "TLE_LINE2":    l2,
+            "EPOCH":        epoch,
+        })
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(rows)
+    df["EPOCH"] = pd.to_datetime(df["EPOCH"], utc=True)
+    live_starlink_df = df
+    live_starlink_updated_at = datetime.now(timezone.utc)
+    print(f"Live TLE fetch complete: {len(df):,} Starlink satellites loaded.")
+    return df
+
+
+def _daily_tle_refresh():
+    """Background thread: refresh TLEs every 24 hours."""
+    while True:
+        time.sleep(86400)   # 24 hours
+        try:
+            fetch_live_starlink_tles()
+        except Exception as ex:
+            print(f"Daily TLE refresh failed: {ex}")
+
+
+# Initial fetch at startup
+fetch_live_starlink_tles()
+
+# Start daily background refresh thread
+_refresh_thread = threading.Thread(target=_daily_tle_refresh, daemon=True)
+_refresh_thread.start()
 
 # ---------------------------------------------------------------------------
 # Request / Response models
@@ -228,9 +327,14 @@ async def predict(req: PredictRequest):
 
 @app.get("/eta_now")
 async def eta_now():
-    """Return all sample satellites that are currently inside the ETA region."""
-    if sample_df is None or corrector is None:
-        raise HTTPException(status_code=503, detail="System not ready.")
+    """Return all Starlink satellites currently inside the ETA region."""
+    if corrector is None:
+        raise HTTPException(status_code=503, detail="ML corrector not ready.")
+
+    # Use full live constellation; fall back to sample DB if fetch hasn't run yet
+    scan_df = live_starlink_df if live_starlink_df is not None else sample_df
+    if scan_df is None:
+        raise HTTPException(status_code=503, detail="No satellite data available.")
 
     from sgp4.api import Satrec
 
@@ -238,8 +342,8 @@ async def eta_now():
     jd_now, fr_now = datetime_to_jd(now_utc)
 
     results = []
-    # Use the latest TLE per satellite
-    latest_tles = sample_df.sort_values("EPOCH").groupby("NORAD_CAT_ID").last().reset_index()
+    # One row per satellite (latest TLE)
+    latest_tles = scan_df.sort_values("EPOCH").groupby("NORAD_CAT_ID").last().reset_index()
 
     for _, row in latest_tles.iterrows():
         try:
@@ -254,33 +358,34 @@ async def eta_now():
             if not corrector.is_in_eta_region(mag_lat, alt):
                 continue
 
-            # ML-corrected position at now
+            # ML-corrected position
             try:
                 r_ml, _, info = corrector.propagate_and_correct(
                     satrec, row["EPOCH"].to_pydatetime(), now_utc
                 )
                 correction_km = float(np.linalg.norm(np.array(r_ml) - r))
             except Exception:
-                r_ml = r
                 correction_km = 0.0
 
             results.append({
-                "norad_id": int(row["NORAD_CAT_ID"]),
-                "name": str(row["OBJECT_NAME"]),
-                "lat": round(float(lat), 2),
-                "lon": round(float(lon), 2),
-                "alt": round(float(alt), 1),
-                "mag_lat": round(float(mag_lat), 2),
-                "correction_km": round(correction_km, 4),
-                "tle_epoch": row["EPOCH"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "norad_id":       int(row["NORAD_CAT_ID"]),
+                "name":           str(row["OBJECT_NAME"]),
+                "lat":            round(float(lat), 2),
+                "lon":            round(float(lon), 2),
+                "alt":            round(float(alt), 1),
+                "mag_lat":        round(float(mag_lat), 2),
+                "correction_km":  round(correction_km, 4),
+                "tle_epoch":      row["EPOCH"].strftime("%Y-%m-%dT%H:%M:%SZ"),
             })
         except Exception:
             continue
 
     results.sort(key=lambda x: abs(x["mag_lat"]))
     return JSONResponse(content={
-        "checked_at": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "checked_at":   now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "total_in_eta": len(results),
-        "satellites": results,
+        "total_scanned": len(latest_tles),
+        "tle_source":   "CelesTrak (live)" if live_starlink_df is not None else "Sample DB (fallback)",
+        "satellites":   results,
     })
 
