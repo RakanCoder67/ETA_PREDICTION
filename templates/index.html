@@ -3,35 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Starlink ML Orbit Predictor — XGBoost-Corrected SGP4</title>
-  <meta name="description" content="Machine-learning corrected Starlink orbit predictor. Reduces SGP4 position error by 94.9% using XGBoost trained on space weather and atmospheric drag features." />
+  <title>Starlink Satellite Orbit Predictor</title>
 
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
-
-  <!-- Chart.js -->
+  <!-- Chart.js for rendering the output graph -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
   <style>
-    /* ── Reset & Tokens ──────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; }
-    :root {
-      --accent: #3b82f6;
-      --green:  #06d6a0;
-      --yellow: #fbbf24;
-      --border: #2a2a3e;
-      --card:   #1a1a28;
-      --surface:#131320;
-    }
-    html { scroll-behavior: smooth; }
+    /* ==========================================================================
+       SIMPLE STUDENT-STYLE DESIGN
+       ========================================================================== */
     body {
-      background-color: #0e0e1a;
-      color: #e8e8f0;
-      font-family: 'Inter', Arial, sans-serif;
+      background-color: #1e1e24;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      line-height: 1.6;
+      line-height: 1.5;
     }
 
     .container {
@@ -40,88 +27,40 @@
       padding: 20px;
     }
 
-    /* ── Sticky Nav ─────────────────────────────────────────── */
-    .topnav {
-      position: sticky; top: 0; z-index: 200;
-      background: rgba(14,14,26,0.88);
-      backdrop-filter: blur(14px);
-      border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 24px;
-    }
-    .topnav-brand { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; text-transform: uppercase; }
-    .topnav-clock { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #666680; }
-    .topnav-links { display: flex; gap: 20px; }
-    .topnav-links a { color: #666680; font-size: 12px; font-weight: 500; text-decoration: none; transition: color 0.2s; }
-    .topnav-links a:hover { color: #e8e8f0; }
-
-    /* ── Hero Header ──────────────────────────────────────────── */
     header {
-      position: relative; overflow: hidden;
       text-align: center;
-      padding: 56px 20px 44px;
-      background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.1) 0%, transparent 65%);
-      border-bottom: 1px solid var(--border);
+      padding: 20px 0;
+      border-bottom: 2px solid #3b3b4f;
+      margin-bottom: 30px;
     }
-    #hero-canvas { position: absolute; inset: 0; pointer-events: none; opacity: 0.45; }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 7px;
-      background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3);
-      border-radius: 99px; padding: 4px 14px;
-      font-size: 11px; font-weight: 600; color: #93c5fd;
-      letter-spacing: 0.06em; text-transform: uppercase;
-      margin-bottom: 18px;
-    }
-    .hero-badge::before {
-      content: ''; width: 7px; height: 7px; border-radius: 50%;
-      background: var(--green); box-shadow: 0 0 6px var(--green);
-      animation: blink 1.8s ease-in-out infinite;
-    }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
     header h1 {
-      font-size: clamp(20px, 4vw, 32px); font-weight: 800;
-      letter-spacing: -0.02em; line-height: 1.2;
-      background: linear-gradient(135deg, #e8e8f0 30%, #93c5fd 100%);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin: 0 0 14px 0;
+      margin: 0 0 10px 0;
+      font-size: 26px;
     }
+
     header p {
-      color: #7a7a9a; font-size: 14px;
-      max-width: 580px; margin: 0 auto; line-height: 1.65;
+      color: #b0b0c0;
+      font-size: 14px;
+      margin: 0;
+      line-height: 1.6;
     }
 
-    /* ── Stat Strip ───────────────────────────────────────────── */
-    .stats-strip {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      border-bottom: 1px solid var(--border);
-    }
-    .stat-item {
-      text-align: center; padding: 22px 12px;
-      border-right: 1px solid var(--border);
-    }
-    .stat-item:last-child { border-right: none; }
-    .stat-num {
-      font-size: 26px; font-weight: 800;
-      color: var(--green); font-family: 'JetBrains Mono', monospace; line-height: 1;
-    }
-    .stat-label { font-size: 11px; color: #666680; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
-
-    /* ── Cards ────────────────────────────────────────────────── */
+    /* CARD STYLE FOR THE INPUT TOOL */
     .tool-section {
-      background-color: #181825;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 22px;
-      margin-bottom: 28px;
-      transition: border-color 0.25s, box-shadow 0.25s;
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 30px;
     }
-    .tool-section:hover { border-color: rgba(59,130,246,0.3); box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
 
     .step-title {
-      font-size: 13px; font-weight: 700; margin-top: 0; margin-bottom: 8px;
-      color: var(--accent); text-transform: uppercase; letter-spacing: 0.07em;
+      font-size: 16px;
+      font-weight: bold;
+      margin-top: 0;
+      margin-bottom: 8px;
+      color: #38bdf8;
     }
 
     .tool-section p {
@@ -140,18 +79,20 @@
     }
 
     .sat-btn {
-      background: #0e0e1a; color: #e8e8f0;
-      border: 1px solid var(--border);
-      border-radius: 6px; padding: 7px 13px;
-      font-size: 12px; font-family: 'JetBrains Mono', monospace;
-      cursor: pointer; font-weight: 600;
-      transition: background 0.18s, border-color 0.18s, transform 0.12s;
+      background-color: #1e1e24;
+      color: #ffffff;
+      border: 1px solid #3b82f6;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.2s;
     }
+
     .sat-btn:hover {
-      background: rgba(59,130,246,0.15); border-color: var(--accent);
-      transform: translateY(-1px);
+      background-color: #3b82f6;
     }
-    .sat-btn.active { background: var(--accent); border-color: var(--accent); color:#fff; }
 
     .form-group {
       display: flex;
@@ -174,32 +115,32 @@
     }
 
     .btn-run {
-      background: linear-gradient(135deg,#3b82f6,#2563eb);
-      color:#fff; border:none; border-radius:7px;
-      padding: 11px 22px; font-size:14px; font-weight:700;
-      cursor:pointer; font-family:'Inter',sans-serif;
-      transition: opacity 0.2s, transform 0.15s;
-      white-space: nowrap;
+      background-color: #3b82f6;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
     }
-    .btn-run:hover { opacity:0.88; transform:translateY(-1px); }
-    .btn-run:active { transform:translateY(0); }
-    .btn-run:disabled { background:#2a2a3e; cursor:not-allowed; transform:none; }
 
-    /* ── Loader ──────────────────────────────────────────────── */
+    .btn-run:hover {
+      background-color: #2563eb;
+    }
+
+    .btn-run:disabled {
+      background-color: #555555;
+      cursor: not-allowed;
+    }
+
+    /* LOADER & ERRORS */
     .loader {
-      display: none; margin-top: 14px;
-      align-items: center; gap: 10px;
-      font-size: 13px; color: #7a7a9a;
+      display: none;
+      margin-top: 15px;
+      font-size: 13px;
+      color: #a0a0b0;
     }
-    .loader.visible { display: flex !important; }
-    .loader-dots span {
-      display: inline-block; width:7px; height:7px; border-radius:50%;
-      background: var(--accent);
-      animation: bounce 0.9s ease-in-out infinite;
-    }
-    .loader-dots span:nth-child(2){animation-delay:.15s}
-    .loader-dots span:nth-child(3){animation-delay:.3s}
-    @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 
     .error-box {
       display: none;
@@ -248,17 +189,23 @@
     }
 
     .status-badge {
-      display: inline-block; font-size: 11px;
-      padding: 3px 10px; border-radius: 99px;
-      font-weight: 700; margin-top: 5px;
+      display: inline-block;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-top: 4px;
     }
+
     .badge-in {
-      background: rgba(251,191,36,0.12); border: 1px solid var(--yellow);
-      color: var(--yellow);
-      animation: pulse-badge 2s ease-in-out infinite;
+      background-color: #fbbf24;
+      color: #000000;
     }
-    @keyframes pulse-badge{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0.4)}50%{box-shadow:0 0 0 7px rgba(251,191,36,0)}}
-    .badge-out { background:rgba(100,100,130,0.12); border:1px solid #3a3a55; color:#7a7a9a; }
+
+    .badge-out {
+      background-color: #4b5563;
+      color: #ffffff;
+    }
 
     .chart-box {
       height: 250px;
@@ -376,24 +323,35 @@
     }
 
     .graph-card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; overflow: hidden; cursor: pointer;
-      transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
     }
-    .graph-card:hover {
-      border-color: rgba(59,130,246,0.5);
-      transform: translateY(-3px);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.5);
-    }
+
     .graph-card img {
-      width: 100%; height: 170px; object-fit: cover;
-      display: block; border-bottom: 1px solid var(--border);
-      transition: opacity 0.2s;
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      display: block;
+      border-bottom: 1px solid #3e3e4f;
     }
-    .graph-card:hover img { opacity: 0.88; }
-    .graph-info { padding: 11px 13px; }
-    .graph-title { font-size: 13px; font-weight: 700; }
-    .graph-desc { font-size: 12px; color: #7a7a9a; margin-top: 3px; line-height:1.4; }
+
+    .graph-info {
+      padding: 10px;
+    }
+
+    .graph-title {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .graph-desc {
+      font-size: 12px;
+      color: #a0a0b0;
+      margin-top: 4px;
+    }
 
     /* HOW IT WORKS SECTION */
     .info-section {
@@ -412,18 +370,23 @@
     }
 
     .info-card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 18px;
-      transition: border-color 0.2s, transform 0.2s;
+      background-color: #2b2b36;
+      border: 1px solid #3e3e4f;
+      border-radius: 6px;
+      padding: 15px;
     }
-    .info-card:hover { border-color: rgba(59,130,246,0.4); transform: translateY(-2px); }
-    .info-num {
-      font-size: 28px; font-weight: 800;
-      color: rgba(59,130,246,0.25); font-family: 'JetBrains Mono', monospace;
-      line-height: 1; margin-bottom: 8px;
+
+    .info-title {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 5px;
     }
-    .info-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-    .info-desc { font-size: 12px; color: #7a7a9a; line-height: 1.5; }
+
+    .info-desc {
+      font-size: 12px;
+      color: #a0a0b0;
+      line-height: 1.4;
+    }
 
     /* LIGHTBOX */
     #lightbox {
@@ -447,29 +410,16 @@
       border: 1px solid #3e3e4f;
     }
 
-    /* ── Results Block Animation ─────────────────────────────── */
-    .results-block { animation: fadeUp 0.35s ease; }
-    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-
-    /* ── Improvement Bars ────────────────────────────────────── */
-    .improve-row { margin: 18px 0; }
-    .improve-label { display:flex; justify-content:space-between; font-size:12px; color:#7a7a9a; margin-bottom:5px; }
-    .improve-track { height:7px; background:var(--border); border-radius:99px; overflow:hidden; }
-    .improve-fill {
-      height:100%; border-radius:99px;
-      background: linear-gradient(90deg, var(--green), #059669);
-      width:0%; transition: width 1.3s cubic-bezier(.25,.8,.25,1);
-    }
-
-    /* ── Footer ──────────────────────────────────────────────── */
+    /* FOOTER */
     footer {
-      text-align: center; font-size: 12px; color: #555570;
-      padding: 28px 0 32px; border-top: 1px solid var(--border); margin-top: 12px;
+      text-align: center;
+      font-size: 12px;
+      color: #808090;
+      padding: 20px 0;
+      border-top: 1px solid #3b3b4f;
     }
-    footer .footer-brand { font-weight: 700; color: var(--accent); margin-bottom: 4px; }
 
-    @media (max-width: 700px) {
-      .stats-strip { grid-template-columns: 1fr 1fr; }
+    @media (max-width: 768px) {
       .summary-grid { grid-template-columns: 1fr; }
       .graphs-grid { grid-template-columns: 1fr; }
       .info-grid { grid-template-columns: 1fr; }
@@ -479,57 +429,26 @@
 </head>
 <body>
 
-  <!-- ── Sticky Nav ── -->
-  <nav class="topnav">
-    <div class="topnav-brand">⚡ Starlink ML Predictor</div>
-    <div class="topnav-clock" id="utc-clock">—</div>
-    <div class="topnav-links">
-      <a href="#tool">Predictor</a>
-      <a href="#accuracy">Accuracy</a>
-      <a href="#graphs">Graphs</a>
-      <a href="#citations">Citations</a>
-    </div>
-  </nav>
-
-  <!-- ── Stat Strip ── -->
-  <div class="stats-strip">
-    <div class="stat-item">
-      <div class="stat-num" id="stat-improvement" data-target="94.9">0%</div>
-      <div class="stat-label">Accuracy Improvement vs SGP4</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" id="stat-error" data-target="1.85">0 km</div>
-      <div class="stat-label">Median 30-Day Error</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-num" id="stat-pairs" data-target="4777">0</div>
-      <div class="stat-label">Real TLE Pair Evaluations</div>
-    </div>
-  </div>
-
   <div class="container">
     <!-- HEADER -->
-    <header id="top">
-      <canvas id="hero-canvas"></canvas>
-      <div class="hero-badge">Live Research Project — Lausanne Collegiate School 2026</div>
+    <header>
       <h1>Starlink Orbit Correction Simulator</h1>
-      <p>Starlink satellites crossing the Equatorial Thermosphere Anomaly experience unpredictable atmospheric drag. Standard physics models drift by tens of kilometres. Our XGBoost ML model corrects these errors in real time.</p>
+      <p>Starlink satellites fly in Low Earth Orbit. When they cross the Earth's equator (the Equatorial Thermosphere Anomaly region), atmospheric drag changes unpredictably. Standard physics models (SGP4) drift off course. Our Machine Learning model fixes these errors.</p>
     </header>
 
     <!-- SIMULATOR TOOL -->
-    <span id="tool"></span>
     <section class="tool-section">
       <!-- MODE SELECTOR -->
-      <div style="display: flex; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 16px; flex-wrap: wrap;">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#e8e8f0;font-weight:600;font-size:13px;border:1.5px solid var(--border);border-radius:8px;padding:9px 14px;transition:border-color .2s;" id="pill-eval" onclick="setPill('evaluation')">
-          <input type="radio" name="sim-mode" value="evaluation" checked onchange="toggleSimMode()" style="display:none;" />
+      <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #3b3b4f; padding-bottom: 15px; flex-wrap: wrap;">
+        <label id="pill-eval" style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#ffffff;font-weight:bold;font-size:13px;border:1px solid #3b82f6;border-radius:6px;padding:7px 13px;">
+          <input type="radio" name="sim-mode" value="evaluation" checked onchange="toggleSimMode()" style="accent-color:#3b82f6;" />
           📊 Historical Evaluation
         </label>
-        <label style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#7a7a9a;font-weight:600;font-size:13px;border:1.5px solid var(--border);border-radius:8px;padding:9px 14px;transition:border-color .2s;" id="pill-live" onclick="setPill('live')">
-          <input type="radio" name="sim-mode" value="live" onchange="toggleSimMode()" style="display:none;" />
+        <label id="pill-live" style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#808090;font-weight:bold;font-size:13px;border:1px solid #3b3b4f;border-radius:6px;padding:7px 13px;">
+          <input type="radio" name="sim-mode" value="live" onchange="toggleSimMode()" style="accent-color:#06d6a0;" />
           📡 Live 30-Day Predictor
         </label>
-        <label style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#7a7a9a;font-weight:600;font-size:13px;border:1.5px solid var(--border);border-radius:8px;padding:9px 14px;transition:border-color .2s;" id="pill-eta" onclick="showEtaNow()">
+        <label id="pill-eta" style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#808090;font-weight:bold;font-size:13px;border:1px solid #3b3b4f;border-radius:6px;padding:7px 13px;" onclick="showEtaNow()">
           🌏 In ETA Now
         </label>
       </div>
@@ -573,7 +492,6 @@
 
       <!-- Loading and Error indicators -->
       <div id="loading-spinner" class="loader">
-        <div class="loader-dots"><span></span><span></span><span></span></div>
         <span>Calculating satellite trajectory adjustments...</span>
       </div>
 
@@ -643,21 +561,18 @@
     <section id="eta-now-panel" style="display:none;" class="tool-section">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         <div>
-          <div class="step-title" style="margin-bottom:2px;">🌏 Satellites Currently Inside the ETA</div>
-          <div style="font-size:12px;color:#7a7a9a;">Scanned at <span id="eta-checked-at">—</span> UTC &nbsp;·&nbsp; <span id="eta-count" style="color:var(--yellow);font-weight:700;">0</span> satellite(s) in ETA right now</div>
+          <div class="step-title">🌏 Satellites Currently Inside the ETA</div>
+          <div style="font-size:12px;color:#808090;margin-top:2px;">Scanned at <span id="eta-checked-at">—</span> UTC &nbsp;·&nbsp; <span id="eta-count" style="color:#fbbf24;font-weight:bold;">0</span> satellite(s) in ETA right now</div>
         </div>
-        <button class="btn-run" id="eta-refresh-btn" onclick="loadEtaNow()" style="padding:8px 18px;font-size:13px;">🔄 Refresh</button>
+        <button class="btn-run" id="eta-refresh-btn" onclick="loadEtaNow()" style="padding:8px 16px;font-size:13px;">🔄 Refresh</button>
       </div>
 
-      <div id="eta-loading" class="loader" style="margin-bottom:12px;">
-        <div class="loader-dots"><span></span><span></span><span></span></div>
-        <span>Scanning all satellites for ETA crossings…</span>
-      </div>
+      <div id="eta-loading" class="loader">Scanning all satellites for ETA crossings…</div>
       <div id="eta-error" class="error-box"></div>
 
       <div id="eta-results" style="display:none;">
-        <div id="eta-empty" style="display:none;text-align:center;padding:32px 0;color:#7a7a9a;font-size:14px;">
-          No satellites from the sample database are currently inside the ETA.<br>Check back in a few minutes — Starlink orbits the Earth every ~90 minutes.
+        <div id="eta-empty" style="display:none;text-align:center;padding:28px 0;color:#808090;font-size:13px;">
+          No satellites from the sample database are currently inside the ETA. Check back in a few minutes — Starlink orbits the Earth every ~90 minutes.
         </div>
         <div class="table-container" id="eta-table-wrap" style="display:block;">
           <table>
@@ -677,7 +592,7 @@
     </section>
 
     <!-- ACCURACY NUMBERS -->
-    <section class="compare-section" id="accuracy">
+    <section class="compare-section">
       <h2>Overall Prediction Accuracy</h2>
       <p style="font-size: 13px; color: #a0a0b0; margin-top: 0;">
         Average prediction errors across 50 test satellites not seen during training. Lower numbers mean higher accuracy.
@@ -710,7 +625,7 @@
     </section>
 
     <!-- FIGURES -->
-    <section class="graphs-section" id="graphs">
+    <section class="graphs-section">
       <h2>Evaluation Graphs</h2>
       <p style="font-size: 13px; color: #a0a0b0; margin-top: 0;">
         Click a graph to view in full size.
@@ -740,37 +655,22 @@
       <h2>How it Works</h2>
       <div class="info-grid">
         <div class="info-card">
-          <div class="info-num">01</div>
-          <div class="info-title">Data Collection</div>
-          <div class="info-desc">Historic Starlink TLE datasets from Space-Track.org are matched with real-time space weather indices (F10.7, Ap, Kp, Dst).</div>
+          <div class="info-title">1. Data Collection</div>
+          <div class="info-desc">Loads standard satellite positions and matches them with live space weather indexes.</div>
         </div>
         <div class="info-card">
-          <div class="info-num">02</div>
-          <div class="info-title">Anomaly Detection</div>
-          <div class="info-desc">Checks latitude, LTAN, and plasma bubble probability to flag crossings of the Equatorial Thermosphere Anomaly high-drag zone.</div>
+          <div class="info-title">2. Anomaly Check</div>
+          <div class="info-desc">Checks if the satellite is crossing the high-drag Equatorial Thermosphere Anomaly region.</div>
         </div>
         <div class="info-card">
-          <div class="info-num">03</div>
-          <div class="info-title">ML Correction</div>
-          <div class="info-desc">XGBoost models predict drag residuals in RSW coordinates. The correction vector is rotated to ECI and added to the SGP4 position.</div>
-        </div>
-      </div>
-
-      <!-- Accuracy improvement bars -->
-      <div style="margin-top:22px;">
-        <div class="improve-row">
-          <div class="improve-label"><span>24-Hour Accuracy Improvement vs SGP4</span><span style="color:#06d6a0;font-weight:700;">93.4%</span></div>
-          <div class="improve-track"><div class="improve-fill" data-width="93.4"></div></div>
-        </div>
-        <div class="improve-row">
-          <div class="improve-label"><span>30-Day Accuracy Improvement vs SGP4</span><span style="color:#06d6a0;font-weight:700;">94.9%</span></div>
-          <div class="improve-track"><div class="improve-fill" data-width="94.9"></div></div>
+          <div class="info-title">3. Apply Correction</div>
+          <div class="info-desc">Calculates position errors and adjusts predicted coordinates to match reality.</div>
         </div>
       </div>
     </section>
 
     <!-- CITATIONS & METHODOLOGY -->
-    <section class="compare-section" id="citations" style="margin-top: 40px; background-color: rgba(15,23,42,0.5); border: 1px solid #1e3a5f; padding: 25px; border-radius: 10px; text-align: left;">
+    <section class="compare-section" style="margin-top: 40px; background-color: rgba(30, 41, 59, 0.4); border: 1px solid #334155; padding: 25px; border-radius: 8px; text-align: left;">
       <h2 style="margin-top: 0; color: #ffffff; text-align: left;">Data Citations &amp; Methodology</h2>
       <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6;">
         Our system integrates real-world astrodynamics libraries, satellite observations, and geomagnetic telemetry to compute atmospheric drag adjustments:
@@ -784,133 +684,30 @@
 
     <!-- FOOTER -->
     <footer>
-      <div class="footer-brand">Starlink ML Orbit Predictor</div>
-      Rakan Alghamdi &copy; 2026 &nbsp;·&nbsp; Lausanne Collegiate School &nbsp;·&nbsp;
-      Orbital data: <a href="https://www.space-track.org" target="_blank" style="color:#555570;">Space-Track.org</a> &nbsp;·&nbsp;
-      Space weather: <a href="https://omniweb.gsfc.nasa.gov" target="_blank" style="color:#555570;">NASA OMNIweb</a>
+      Rakan Alghamdi &copy; 2026
     </footer>
   </div>
 
   <!-- LIGHTBOX -->
   <div id="lightbox" onclick="closeLightbox()">
-    <span id="lightbox-close" onclick="closeLightbox()">✕</span>
     <img id="lightbox-img" src="" alt="Graph Zoom" />
   </div>
 
   <script>
-    /* ── UTC Clock ────────────────────────────────────────── */
-    function updateClock() {
-      const now = new Date();
-      const s = now.toUTCString().replace('GMT','UTC');
-      document.getElementById('utc-clock').textContent = s.slice(0, s.length - 4) + ' UTC';
-    }
-    updateClock();
-    setInterval(updateClock, 1000);
-
-    /* ── Starfield Canvas ─────────────────────────────────── */
-    (function() {
-      const canvas = document.getElementById('hero-canvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      let stars = [];
-      function resize() {
-        canvas.width  = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
-        stars = Array.from({length: 90}, () => ({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          r: Math.random() * 1.2 + 0.3,
-          a: Math.random(),
-          s: (Math.random() - 0.5) * 0.003
-        }));
-      }
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        stars.forEach(s => {
-          s.a = Math.max(0.05, Math.min(1, s.a + s.s));
-          if (s.a <= 0.05 || s.a >= 1) s.s *= -1;
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(180,200,255,${s.a})`;
-          ctx.fill();
-        });
-        requestAnimationFrame(draw);
-      }
-      resize();
-      window.addEventListener('resize', resize);
-      draw();
-    })();
-
-    /* ── Count-Up Stats ───────────────────────────────────── */
-    function countUp() {
-      const el1 = document.getElementById('stat-improvement');
-      const el2 = document.getElementById('stat-error');
-      const el3 = document.getElementById('stat-pairs');
-      let start = null;
-      const dur = 1800;
-      function step(ts) {
-        if (!start) start = ts;
-        const p = Math.min((ts - start) / dur, 1);
-        const ease = 1 - Math.pow(1 - p, 3);
-        el1.textContent = (ease * 94.9).toFixed(1) + '%';
-        el2.textContent = (ease * 1.85).toFixed(2) + ' km';
-        el3.textContent = Math.round(ease * 4777).toLocaleString();
-        if (p < 1) requestAnimationFrame(step);
-      }
-      requestAnimationFrame(step);
-    }
-    const obs = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) { countUp(); obs.disconnect(); }
-    }, {threshold: 0.2});
-    const stripEl = document.querySelector('.stats-strip');
-    if (stripEl) obs.observe(stripEl);
-
-    /* ── Improvement Bars ─────────────────────────────────── */
-    const barObs = new IntersectionObserver(entries => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          document.querySelectorAll('.improve-fill').forEach(bar => {
-            bar.style.width = bar.dataset.width + '%';
-          });
-          barObs.disconnect();
-        }
-      });
-    }, {threshold: 0.3});
-    const barSection = document.querySelector('.improve-row');
-    if (barSection) barObs.observe(barSection);
-
-    /* ── Sat button active state ──────────────────────────── */
-    function selectSat(id) {
-      document.querySelectorAll('.sat-btn').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
-      document.getElementById('norad-input').value = id;
-      runPrediction();
-    }
-
     /* ==========================================================================
        PAGE LOGIC
        ========================================================================== */
     let predictionsChart = null;
 
-    function setPill(mode) {
-      ['eval','live','eta'].forEach(id => {
-        const el = document.getElementById('pill-' + id);
-        if (!el) return;
-        el.style.borderColor = 'var(--border)';
-        el.style.color = '#7a7a9a';
-      });
-      const active = document.getElementById('pill-' + (mode === 'evaluation' ? 'eval' : mode));
-      if (active) {
-        active.style.borderColor = mode === 'live' ? 'var(--green)' : mode === 'eta' ? 'var(--yellow)' : 'var(--accent)';
-        active.style.color = '#e8e8f0';
-      }
-    }
-
     function showEtaNow() {
-      // Hide the main predictor tool UI, show the ETA panel
       document.querySelector('section.tool-section').style.display = 'none';
       document.getElementById('eta-now-panel').style.display = 'block';
-      setPill('eta');
+      document.getElementById('pill-eval').style.color = '#808090';
+      document.getElementById('pill-eval').style.borderColor = '#3b3b4f';
+      document.getElementById('pill-live').style.color = '#808090';
+      document.getElementById('pill-live').style.borderColor = '#3b3b4f';
+      document.getElementById('pill-eta').style.color = '#fbbf24';
+      document.getElementById('pill-eta').style.borderColor = '#fbbf24';
       loadEtaNow();
     }
 
@@ -919,9 +716,9 @@
       const errEl  = document.getElementById('eta-error');
       const resEl  = document.getElementById('eta-results');
       const btn    = document.getElementById('eta-refresh-btn');
-      loadEl.classList.add('visible');
-      errEl.style.display = 'none';
-      resEl.style.display = 'none';
+      loadEl.style.display = 'block';
+      errEl.style.display  = 'none';
+      resEl.style.display  = 'none';
       btn.disabled = true;
       try {
         const resp = await fetch('/eta_now');
@@ -940,11 +737,11 @@
           data.satellites.forEach(sat => {
             tbody.innerHTML += `
               <tr>
-                <td><strong>${sat.name}</strong><br><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#7a7a9a;">${sat.norad_id}</span></td>
+                <td><strong>${sat.name}</strong><br><span style="font-size:11px;color:#808090;">${sat.norad_id}</span></td>
                 <td>${sat.lat.toFixed(2)}° / ${sat.lon.toFixed(2)}°</td>
                 <td>${sat.alt.toFixed(1)}</td>
-                <td style="color:var(--yellow);font-weight:600;">${sat.mag_lat.toFixed(2)}°</td>
-                <td style="color:var(--green);font-weight:700;">${sat.correction_km.toFixed(4)} km</td>
+                <td style="color:#fbbf24;font-weight:bold;">${sat.mag_lat.toFixed(2)}°</td>
+                <td style="color:#34d399;font-weight:bold;">${sat.correction_km.toFixed(4)} km</td>
               </tr>`;
           });
         }
@@ -953,26 +750,42 @@
         errEl.textContent = e.message;
         errEl.style.display = 'block';
       } finally {
-        loadEl.classList.remove('visible');
+        loadEl.style.display = 'none';
         btn.disabled = false;
       }
     }
 
     function toggleSimMode() {
-      // When switching back to eval/live, hide the ETA panel and show the main tool
+      // Switch back to main predictor from ETA panel
       document.querySelector('section.tool-section').style.display = 'block';
       document.getElementById('eta-now-panel').style.display = 'none';
+      document.getElementById('pill-eta').style.color = '#808090';
+      document.getElementById('pill-eta').style.borderColor = '#3b3b4f';
+
       const mode = document.querySelector('input[name="sim-mode"]:checked').value;
-      setPill(mode);
       if (mode === 'live') {
+        document.getElementById('pill-live').style.color = '#ffffff';
+        document.getElementById('pill-live').style.borderColor = '#06d6a0';
+        document.getElementById('pill-eval').style.color = '#808090';
+        document.getElementById('pill-eval').style.borderColor = '#3b3b4f';
         document.getElementById('step1-title').textContent = 'Step 1: Select Satellite & Future Target (Live mode)';
         document.getElementById('custom-hours-input').placeholder = 'Optional: Future time offset from Today in hours (e.g. 12, 36, 720)';
       } else {
+        document.getElementById('pill-eval').style.color = '#ffffff';
+        document.getElementById('pill-eval').style.borderColor = '#3b82f6';
+        document.getElementById('pill-live').style.color = '#808090';
+        document.getElementById('pill-live').style.borderColor = '#3b3b4f';
         document.getElementById('step1-title').textContent = 'Step 1: Pick a Starlink Satellite';
         document.getElementById('custom-hours-input').placeholder = 'Optional: Enter specific time horizon in hours (e.g. 15.5, 37, 100)';
       }
+      const inputVal = document.getElementById('norad-input').value.trim();
+      if (inputVal) runPrediction();
+    }
 
-    // selectSat defined above with active-state highlight
+    function selectSat(id) {
+      document.getElementById('norad-input').value = id;
+      runPrediction();
+    }
 
     document.getElementById('norad-input').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') runPrediction();
@@ -998,7 +811,7 @@
       const isLiveMode = (simMode === 'live');
 
       document.getElementById('predict-btn').disabled = true;
-      document.getElementById('loading-spinner').classList.add('visible');
+      document.getElementById('loading-spinner').style.display = 'block';
       document.getElementById('error-message').style.display = 'none';
       document.getElementById('results-block').style.display = 'none';
 
@@ -1025,7 +838,7 @@
         displayError(e.message);
       } finally {
         document.getElementById('predict-btn').disabled = false;
-        document.getElementById('loading-spinner').classList.remove('visible');
+        document.getElementById('loading-spinner').style.display = 'none';
       }
     }
 
