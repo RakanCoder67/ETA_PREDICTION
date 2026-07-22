@@ -224,3 +224,63 @@ async def predict(req: PredictRequest):
         "live_mode": bool(req.live_mode),
         "trajectory": trajectory,
     })
+
+
+@app.get("/eta_now")
+async def eta_now():
+    """Return all sample satellites that are currently inside the ETA region."""
+    if sample_df is None or corrector is None:
+        raise HTTPException(status_code=503, detail="System not ready.")
+
+    from sgp4.api import Satrec
+
+    now_utc = datetime.now(timezone.utc)
+    jd_now, fr_now = datetime_to_jd(now_utc)
+
+    results = []
+    # Use the latest TLE per satellite
+    latest_tles = sample_df.sort_values("EPOCH").groupby("NORAD_CAT_ID").last().reset_index()
+
+    for _, row in latest_tles.iterrows():
+        try:
+            satrec = Satrec.twoline2rv(row["TLE_LINE1"], row["TLE_LINE2"])
+            e, r, v = satrec.sgp4(jd_now, fr_now)
+            if e != 0:
+                continue
+            r = np.array(r)
+            lat, lon, alt = teme_to_geodetic(r, jd_now, fr_now)
+            from starlink_eta_corrector import get_geomagnetic_latitude
+            mag_lat = get_geomagnetic_latitude(lat, lon)
+            if not corrector.is_in_eta_region(mag_lat, alt):
+                continue
+
+            # ML-corrected position at now
+            try:
+                r_ml, _, info = corrector.propagate_and_correct(
+                    satrec, row["EPOCH"].to_pydatetime(), now_utc
+                )
+                correction_km = float(np.linalg.norm(np.array(r_ml) - r))
+            except Exception:
+                r_ml = r
+                correction_km = 0.0
+
+            results.append({
+                "norad_id": int(row["NORAD_CAT_ID"]),
+                "name": str(row["OBJECT_NAME"]),
+                "lat": round(float(lat), 2),
+                "lon": round(float(lon), 2),
+                "alt": round(float(alt), 1),
+                "mag_lat": round(float(mag_lat), 2),
+                "correction_km": round(correction_km, 4),
+                "tle_epoch": row["EPOCH"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: abs(x["mag_lat"]))
+    return JSONResponse(content={
+        "checked_at": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "total_in_eta": len(results),
+        "satellites": results,
+    })
+
