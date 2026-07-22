@@ -7,6 +7,8 @@ Uses a seamless 1:9 split layout (wspace=0) to ensure lines connect with no gaps
 
 import os
 import sys
+import warnings
+warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -32,12 +34,24 @@ def load_data():
     df["EPOCH"] = pd.to_datetime(df["EPOCH"], utc=True)
     return df
 
-def find_ground_truth(sat_df, target_time):
-    diffs = np.abs((sat_df["EPOCH"] - target_time).dt.total_seconds())
-    idx = diffs.idxmin()
-    closest_row = sat_df.loc[idx]
+def find_ground_truth(sat_df, target_time, epochs):
+    target_ns = np.datetime64(target_time.replace(tzinfo=None))
     
-    if diffs[idx] > 12 * 3600:
+    idx = np.searchsorted(epochs, target_ns)
+    candidates = []
+    if idx < len(epochs):
+        candidates.append(idx)
+    if idx > 0:
+        candidates.append(idx - 1)
+        
+    if not candidates:
+        return None, None
+        
+    best_idx = min(candidates, key=lambda i: abs(epochs[i] - target_ns))
+    closest_row = sat_df.iloc[best_idx]
+    diff_sec = abs(epochs[best_idx] - target_ns) / np.timedelta64(1, 's')
+    
+    if diff_sec > 12 * 3600:
         return None, None
         
     try:
@@ -78,6 +92,7 @@ def run_propagation():
             
         row0 = sat_df.iloc[0]
         start_epoch = row0["EPOCH"]
+        epochs = sat_df["EPOCH"].dt.tz_localize(None).values
         
         try:
             sr0 = Satrec.twoline2rv(row0["TLE_LINE1"], row0["TLE_LINE2"])
@@ -88,7 +103,7 @@ def run_propagation():
             target_time = start_epoch + timedelta(hours=int(t))
             
             # Ground Truth
-            r_true, v_true = find_ground_truth(sat_df, target_time)
+            r_true, v_true = find_ground_truth(sat_df, target_time, epochs)
             if r_true is None:
                 continue
 
