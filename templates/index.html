@@ -448,15 +448,16 @@
           <input type="radio" name="sim-mode" value="live" onchange="toggleSimMode()" style="accent-color:#06d6a0;" />
           📡 Live 30-Day Predictor
         </label>
-        <label id="pill-eta" style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#808090;font-weight:bold;font-size:13px;border:1px solid #3b3b4f;border-radius:6px;padding:7px 13px;" onclick="showEtaNow()">
+        <label id="pill-eta" style="cursor:pointer;display:flex;align-items:center;gap:8px;color:#808090;font-weight:bold;font-size:13px;border:1px solid #3b3b4f;border-radius:6px;padding:7px 13px;">
+          <input type="radio" name="sim-mode" value="eta" onchange="toggleSimMode()" style="accent-color:#fbbf24;" />
           🌏 In ETA Now
         </label>
       </div>
 
       <div class="step-title" id="step1-title">Step 1: Pick a Starlink Satellite</div>
-      <p>Click any satellite name below, or type its catalog number (NORAD ID):</p>
+      <p id="step1-desc">Click any satellite name below, or type its catalog number (NORAD ID):</p>
 
-      <div class="sat-picker">
+      <div class="sat-picker" id="sat-picker-container">
         <button class="sat-btn" onclick="selectSat(44952)">STARLINK-1117 (44952)</button>
         <button class="sat-btn" onclick="selectSat(46375)">STARLINK-1284 (46375)</button>
         <button class="sat-btn" onclick="selectSat(59470)">STARLINK-3158 (59470)</button>
@@ -757,31 +758,94 @@
       }
     }
 
-    function toggleSimMode() {
-      // Switch back to main predictor from ETA panel
-      document.querySelector('section.tool-section').style.display = 'block';
-      document.getElementById('eta-now-panel').style.display = 'none';
-      document.getElementById('pill-eta').style.color = '#808090';
-      document.getElementById('pill-eta').style.borderColor = '#3b3b4f';
+    const DEFAULT_SATS = [
+      { id: 44952, name: 'STARLINK-1117' },
+      { id: 46375, name: 'STARLINK-1284' },
+      { id: 59470, name: 'STARLINK-3158' },
+      { id: 63090, name: 'STARLINK-5012' },
+      { id: 65676, name: 'STARLINK-5201' }
+    ];
 
+    async function toggleSimMode() {
       const mode = document.querySelector('input[name="sim-mode"]:checked').value;
-      if (mode === 'live') {
-        document.getElementById('pill-live').style.color = '#ffffff';
-        document.getElementById('pill-live').style.borderColor = '#06d6a0';
-        document.getElementById('pill-eval').style.color = '#808090';
-        document.getElementById('pill-eval').style.borderColor = '#3b3b4f';
-        document.getElementById('step1-title').textContent = 'Step 1: Select Satellite & Future Target (Live mode)';
+      const pillEval = document.getElementById('pill-eval');
+      const pillLive = document.getElementById('pill-live');
+      const pillEta = document.getElementById('pill-eta');
+
+      pillEval.style.color = '#808090'; pillEval.style.borderColor = '#3b3b4f';
+      pillLive.style.color = '#808090'; pillLive.style.borderColor = '#3b3b4f';
+      pillEta.style.color = '#808090';  pillEta.style.borderColor = '#3b3b4f';
+
+      const pickerContainer = document.getElementById('sat-picker-container');
+
+      if (mode === 'eta') {
+        pillEta.style.color = '#ffffff';
+        pillEta.style.borderColor = '#fbbf24';
+        document.getElementById('step1-title').textContent = 'Step 1: Select Satellite Currently Crossing ETA';
+        document.getElementById('step1-desc').textContent = 'Scanning full constellation... Click any satellite currently inside the Equatorial Anomaly below:';
         document.getElementById('custom-hours-input').placeholder = 'Optional: Future time offset from Today in hours (e.g. 12, 36, 720)';
+
+        pickerContainer.innerHTML = '<span style="color:#fbbf24;font-size:12px;display:block;padding:8px 0;">🔍 Live-scanning full constellation for satellites currently in ETA...</span>';
+        try {
+          const resp = await fetch('/eta_now');
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.satellites && data.satellites.length > 0) {
+              pickerContainer.innerHTML = '';
+              data.satellites.forEach(sat => {
+                const btn = document.createElement('button');
+                btn.className = 'sat-btn';
+                btn.style.borderColor = '#fbbf24';
+                btn.onclick = () => selectSat(sat.norad_id);
+                btn.innerHTML = `${sat.name} (${sat.norad_id}) <span style="color:#fbbf24;font-size:11px;">[${sat.mag_lat}° MagLat]</span>`;
+                pickerContainer.appendChild(btn);
+              });
+              document.getElementById('step1-desc').textContent = `Found ${data.total_in_eta} Starlink satellite(s) currently traversing the ETA (scanned from ${data.total_scanned} active satellites):`;
+              if (!document.getElementById('norad-input').value) {
+                document.getElementById('norad-input').value = data.satellites[0].norad_id;
+              }
+            } else {
+              document.getElementById('step1-desc').textContent = 'No Starlink satellites currently crossing ETA. Displaying sample satellites:';
+              renderDefaultSatButtons();
+            }
+          } else {
+            renderDefaultSatButtons();
+          }
+        } catch(e) {
+          renderDefaultSatButtons();
+        }
+      } else if (mode === 'live') {
+        pillLive.style.color = '#ffffff';
+        pillLive.style.borderColor = '#06d6a0';
+        document.getElementById('step1-title').textContent = 'Step 1: Select Satellite & Future Target (Live mode)';
+        document.getElementById('step1-desc').textContent = 'Click any satellite name below, or type its catalog number (NORAD ID):';
+        document.getElementById('custom-hours-input').placeholder = 'Optional: Future time offset from Today in hours (e.g. 12, 36, 720)';
+        renderDefaultSatButtons();
       } else {
-        document.getElementById('pill-eval').style.color = '#ffffff';
-        document.getElementById('pill-eval').style.borderColor = '#3b82f6';
-        document.getElementById('pill-live').style.color = '#808090';
-        document.getElementById('pill-live').style.borderColor = '#3b3b4f';
-        document.getElementById('step1-title').textContent = 'Step 1: Pick a Starlink Satellite';
+        pillEval.style.color = '#ffffff';
+        pillEval.style.borderColor = '#3b82f6';
+        document.getElementById('step1-title').textContent = 'Step 1: Pick a Starlink Satellite (Historical Validation)';
+        document.getElementById('step1-desc').textContent = 'Click any satellite name below, or type its catalog number (NORAD ID):';
         document.getElementById('custom-hours-input').placeholder = 'Optional: Enter specific time horizon in hours (e.g. 15.5, 37, 100)';
+        renderDefaultSatButtons();
       }
+
       const inputVal = document.getElementById('norad-input').value.trim();
-      if (inputVal) runPrediction();
+      if (inputVal && document.getElementById('results-block').style.display !== 'none') {
+        runPrediction();
+      }
+    }
+
+    function renderDefaultSatButtons() {
+      const pickerContainer = document.getElementById('sat-picker-container');
+      pickerContainer.innerHTML = '';
+      DEFAULT_SATS.forEach(sat => {
+        const btn = document.createElement('button');
+        btn.className = 'sat-btn';
+        btn.onclick = () => selectSat(sat.id);
+        btn.textContent = `${sat.name} (${sat.id})`;
+        pickerContainer.appendChild(btn);
+      });
     }
 
     function selectSat(id) {
@@ -810,7 +874,7 @@
       const customHoursInput = document.getElementById('custom-hours-input').value.trim();
       const customHours = customHoursInput ? parseFloat(customHoursInput) : null;
       const simMode = document.querySelector('input[name="sim-mode"]:checked').value;
-      const isLiveMode = (simMode === 'live');
+      const isLiveMode = (simMode === 'live' || simMode === 'eta');
 
       document.getElementById('predict-btn').disabled = true;
       document.getElementById('loading-spinner').style.display = 'block';
@@ -851,9 +915,17 @@
     }
 
     function populateResults(data) {
-      // Results Mode Banner
+      const simMode = document.querySelector('input[name="sim-mode"]:checked').value;
       const banner = document.getElementById('results-mode-banner');
-      if (data.live_mode) {
+
+      if (simMode === 'eta') {
+        banner.style.color = '#fbbf24';
+        banner.style.borderColor = '#fbbf24';
+        banner.style.backgroundColor = 'rgba(251, 191, 36, 0.08)';
+        banner.style.borderStyle = 'dashed';
+        banner.style.borderWidth = '1px';
+        banner.textContent = '🌏 ETA Traversal Mode (Propagating live trajectory for satellite currently crossing Equatorial Anomaly)';
+      } else if (data.live_mode) {
         banner.style.color = '#06d6a0';
         banner.style.borderColor = '#06d6a0';
         banner.style.backgroundColor = 'rgba(6, 214, 160, 0.08)';
