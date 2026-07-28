@@ -196,15 +196,24 @@ async def health():
 
 @app.post("/predict")
 async def predict(req: PredictRequest):
-    if sample_df is None or len(sample_df) == 0:
-        raise HTTPException(status_code=503, detail="Satellite database not loaded.")
+    # Search live constellation first (all ~6,800+ active Starlinks), fallback to sample_df
+    sat_df = None
+    if live_starlink_df is not None and len(live_starlink_df) > 0:
+        match_live = live_starlink_df[live_starlink_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
+        if len(match_live) > 0:
+            sat_df = match_live
 
-    sat_df = sample_df[sample_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
-    if len(sat_df) == 0:
+    if sat_df is None or len(sat_df) == 0:
+        if sample_df is not None and len(sample_df) > 0:
+            match_sample = sample_df[sample_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
+            if len(match_sample) > 0:
+                sat_df = match_sample
+
+    if sat_df is None or len(sat_df) == 0:
         raise HTTPException(
             status_code=404,
             detail=(
-                f"NORAD ID {req.norad_id} not found in database. "
+                f"NORAD ID {req.norad_id} not found or satellite has decayed / re-entered atmosphere. "
                 f"Try one of: {available_norads[:5]}"
             ),
         )
@@ -279,9 +288,14 @@ async def predict(req: PredictRequest):
 
         r_sgp4 = np.array(r_sgp4)
 
-        # ML corrected (always propagate relative to standard start_epoch so BSTAR/time drift is model-consistent)
+        # ML corrected
+        if req.live_mode and (now_utc - tle_epoch.to_pydatetime()).total_seconds() > 7 * 86400:
+            start_epoch = now_utc
+        else:
+            start_epoch = tle_epoch.to_pydatetime()
+
         try:
-            r_ml, _, info = corrector.propagate_and_correct(satrec, tle_epoch.to_pydatetime(), t_target)
+            r_ml, _, info = corrector.propagate_and_correct(satrec, start_epoch, t_target)
         except Exception:
             r_ml = r_sgp4
             info = {"in_eta": False, "lat": 0.0, "lon": 0.0, "alt": 0.0, "mag_lat": 0.0}
