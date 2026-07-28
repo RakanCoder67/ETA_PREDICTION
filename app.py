@@ -61,7 +61,7 @@ except Exception as ex:
 # ---------------------------------------------------------------------------
 # Live Starlink TLE fetcher (CelesTrak — no auth required)
 # ---------------------------------------------------------------------------
-CELESTRAK_URL = "https://celestrak.org/SOCRATES/query.php?GROUP=starlink&FORMAT=tle"
+CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
 LIVE_TLE_CACHE = os.path.join(BASE_DIR, "data", "starlink_live_tle.txt")
 
 
