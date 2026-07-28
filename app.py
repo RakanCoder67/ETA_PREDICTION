@@ -61,7 +61,8 @@ except Exception as ex:
 # ---------------------------------------------------------------------------
 # Live Starlink TLE fetcher (CelesTrak — no auth required)
 # ---------------------------------------------------------------------------
-CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
+CELESTRAK_URL = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?FILE=starlink&FORMAT=tle"
+CELESTRAK_ALT_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
 LIVE_TLE_CACHE = os.path.join(BASE_DIR, "data", "starlink_live_tle.txt")
 
 
@@ -86,36 +87,52 @@ def _parse_norad_from_tle1(line1: str) -> int:
 
 
 def fetch_live_starlink_tles() -> pd.DataFrame | None:
-    """Download current Starlink TLEs from CelesTrak and return a DataFrame."""
+    """Download current Starlink TLEs for the full constellation from CelesTrak and return a DataFrame."""
     global live_starlink_df, live_starlink_updated_at
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    text = ""
+
     try:
-        print("Fetching live Starlink TLEs from CelesTrak…")
-        resp = requests.get(CELESTRAK_URL, timeout=30)
-        resp.raise_for_status()
-        text = resp.text.strip()
-        # Cache locally for offline fallback
-        os.makedirs(os.path.dirname(LIVE_TLE_CACHE), exist_ok=True)
-        with open(LIVE_TLE_CACHE, "w") as f:
-            f.write(text)
-    except Exception as ex:
-        print(f"WARNING: CelesTrak fetch failed ({ex}). Trying local cache…")
-        if os.path.exists(LIVE_TLE_CACHE):
-            with open(LIVE_TLE_CACHE) as f:
-                text = f.read().strip()
+        print("Fetching live Starlink constellation TLEs from CelesTrak…")
+        resp = requests.get(CELESTRAK_URL, headers=headers, timeout=45)
+        if resp.status_code == 200 and len(resp.text) > 1000:
+            text = resp.text.strip()
         else:
-            print("No local cache available. Live ETA scan will use sample DB.")
-            return None
+            print("Supplemental fetch small response, trying alternative GP endpoint…")
+            resp2 = requests.get(CELESTRAK_ALT_URL, headers=headers, timeout=45)
+            if resp2.status_code == 200 and len(resp2.text) > 1000:
+                text = resp2.text.strip()
+    except Exception as ex:
+        print(f"WARNING: Live CelesTrak fetch failed ({ex}).")
+
+    if text and "has not updated since your last successful download" not in text:
+        os.makedirs(os.path.dirname(LIVE_TLE_CACHE), exist_ok=True)
+        with open(LIVE_TLE_CACHE, "w", encoding="utf-8") as f:
+            f.write(text)
+    elif os.path.exists(LIVE_TLE_CACHE):
+        print("Loading TLEs from local cache…")
+        with open(LIVE_TLE_CACHE, encoding="utf-8") as f:
+            text = f.read().strip()
+
+    if not text:
+        print("No TLE data available. Live scan will fallback to sample DB.")
+        return None
 
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     rows = []
+    seen_norads = set()
+
     for i in range(0, len(lines) - 2, 3):
         name = lines[i]
         l1   = lines[i + 1]
         l2   = lines[i + 2]
         if not (l1.startswith('1') and l2.startswith('2')):
             continue
-        norad  = _parse_norad_from_tle1(l1)
-        epoch  = _parse_epoch_from_tle1(l1)
+        norad = _parse_norad_from_tle1(l1)
+        if norad in seen_norads:
+            continue
+        seen_norads.add(norad)
+        epoch = _parse_epoch_from_tle1(l1)
         rows.append({
             "NORAD_CAT_ID": norad,
             "OBJECT_NAME":  name,
@@ -131,7 +148,7 @@ def fetch_live_starlink_tles() -> pd.DataFrame | None:
     df["EPOCH"] = pd.to_datetime(df["EPOCH"], utc=True)
     live_starlink_df = df
     live_starlink_updated_at = datetime.now(timezone.utc)
-    print(f"Live TLE fetch complete: {len(df):,} Starlink satellites loaded.")
+    print(f"Live TLE fetch complete: {len(df):,} active Starlink satellites loaded into live tracker.")
     return df
 
 
