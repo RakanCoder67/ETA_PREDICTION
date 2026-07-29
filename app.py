@@ -263,8 +263,7 @@ async def predict(req: PredictRequest):
         raise HTTPException(
             status_code=404,
             detail=(
-                f"NORAD ID {req.norad_id} is not an active orbital satellite (or has decayed/re-entered atmosphere). "
-                f"Try an active Starlink catalog ID like 44952, 46375, 59470, 63090, or 65676."
+                f"NORAD Catalog ID {req.norad_id} was not found or is no longer an active satellite in orbit."
             ),
         )
 
