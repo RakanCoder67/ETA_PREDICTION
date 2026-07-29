@@ -220,13 +220,39 @@ async def health():
 
 @app.post("/predict")
 async def predict(req: PredictRequest):
-    # Search live constellation first (all ~6,800+ active Starlinks), fallback to sample_df
     sat_df = None
+
+    # 1. Search pre-loaded live constellation dataframe
     if live_starlink_df is not None and len(live_starlink_df) > 0:
         match_live = live_starlink_df[live_starlink_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
         if len(match_live) > 0:
             sat_df = match_live
 
+    # 2. Dynamic single-satellite query fallback from CelesTrak for any valid typed NORAD ID
+    if sat_df is None or len(sat_df) == 0:
+        try:
+            url_single = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={req.norad_id}&FORMAT=tle"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            r_single = requests.get(url_single, headers=headers, timeout=10)
+            if r_single.status_code == 200 and len(r_single.text.strip()) > 50:
+                s_lines = [l.strip() for l in r_single.text.splitlines() if l.strip()]
+                if len(s_lines) >= 3 and s_lines[1].startswith('1 ') and s_lines[2].startswith('2 '):
+                    single_name = s_lines[0]
+                    single_l1   = s_lines[1]
+                    single_l2   = s_lines[2]
+                    single_epoch = _parse_epoch_from_tle1(single_l1)
+                    single_norad = _parse_norad_from_tle1(single_l1)
+                    sat_df = pd.DataFrame([{
+                        "NORAD_CAT_ID": single_norad if single_norad > 0 else req.norad_id,
+                        "OBJECT_NAME": single_name,
+                        "TLE_LINE1": single_l1,
+                        "TLE_LINE2": single_l2,
+                        "EPOCH": single_epoch
+                    }])
+        except Exception:
+            pass
+
+    # 3. Fallback to sample_df
     if sat_df is None or len(sat_df) == 0:
         if sample_df is not None and len(sample_df) > 0:
             match_sample = sample_df[sample_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
@@ -237,8 +263,8 @@ async def predict(req: PredictRequest):
         raise HTTPException(
             status_code=404,
             detail=(
-                f"NORAD ID {req.norad_id} not found or satellite has decayed / re-entered atmosphere. "
-                f"Try one of: {available_norads[:5]}"
+                f"NORAD ID {req.norad_id} is not an active orbital satellite (or has decayed/re-entered atmosphere). "
+                f"Try an active Starlink catalog ID like 44952, 46375, 59470, 63090, or 65676."
             ),
         )
 
