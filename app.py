@@ -46,7 +46,6 @@ try:
 except Exception as ex:
     print(f"WARNING: Could not load StarlinkETACorrector: {ex}")
 
-try:
 MASTER_TLE_CSV = os.path.join(BASE_DIR, "data", "starlink_master_tle.csv")
 
 try:
@@ -263,12 +262,20 @@ async def predict(req: PredictRequest):
         except Exception:
             pass
 
-    # 3. Fallback to sample_df
+    is_historical_sample = False
+    # 3. Fallback to sample_df for historical evaluation pairs
     if sat_df is None or len(sat_df) == 0:
         if sample_df is not None and len(sample_df) > 0:
             match_sample = sample_df[sample_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
             if len(match_sample) > 0:
                 sat_df = match_sample
+                is_historical_sample = True
+    else:
+        # Check if it was also in sample_df
+        if sample_df is not None and len(sample_df) > 0:
+            match_sample = sample_df[sample_df["NORAD_CAT_ID"] == req.norad_id].sort_values("EPOCH")
+            if len(match_sample) > 0:
+                is_historical_sample = True
 
     if sat_df is None or len(sat_df) == 0:
         raise HTTPException(
@@ -277,6 +284,8 @@ async def predict(req: PredictRequest):
                 f"NORAD Catalog ID {req.norad_id} was not found or is no longer an active satellite in orbit."
             ),
         )
+
+    effective_live_mode = req.live_mode or (not is_historical_sample)
 
     if corrector is None:
         raise HTTPException(status_code=503, detail="ML corrector not initialised.")
@@ -309,7 +318,7 @@ async def predict(req: PredictRequest):
 
     # Check ETA status at epoch (or NOW in live mode)
     try:
-        ref_time = now_utc if req.live_mode else tle_epoch.to_pydatetime()
+        ref_time = now_utc if effective_live_mode else tle_epoch.to_pydatetime()
         jd0, fr0 = datetime_to_jd(ref_time)
         _, r0, v0 = satrec.sgp4(jd0, fr0)
         lat0, lon0, alt0 = teme_to_geodetic(np.array(r0), jd0, fr0)
@@ -320,7 +329,7 @@ async def predict(req: PredictRequest):
         in_eta_now = False
 
     # Build trajectory: key horizons
-    if req.live_mode:
+    if effective_live_mode:
         base_horizons = [0.0, 24.0, 48.0, 72.0, 168.0, 360.0, 720.0]
     else:
         base_horizons = [24.0, 48.0, 72.0, 168.0, 360.0, 720.0]
@@ -334,7 +343,7 @@ async def predict(req: PredictRequest):
     custom_point = None
 
     for h in HORIZONS_H:
-        if req.live_mode:
+        if effective_live_mode:
             t_target = now_utc + timedelta(hours=h)
         else:
             t_target = tle_epoch.to_pydatetime() + timedelta(hours=h)
@@ -349,7 +358,7 @@ async def predict(req: PredictRequest):
         r_sgp4 = np.array(r_sgp4)
 
         # ML corrected
-        if req.live_mode and (now_utc - tle_epoch.to_pydatetime()).total_seconds() > 7 * 86400:
+        if effective_live_mode and (now_utc - tle_epoch.to_pydatetime()).total_seconds() > 7 * 86400:
             start_epoch = now_utc
         else:
             start_epoch = tle_epoch.to_pydatetime()
@@ -394,7 +403,7 @@ async def predict(req: PredictRequest):
         "space_weather": space_weather,
         "in_eta_now": bool(in_eta_now),
         "custom_point": custom_point,
-        "live_mode": bool(req.live_mode),
+        "live_mode": bool(effective_live_mode),
         "trajectory": trajectory,
     })
 
