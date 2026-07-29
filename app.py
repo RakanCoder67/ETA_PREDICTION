@@ -134,8 +134,8 @@ def fetch_live_starlink_tles() -> pd.DataFrame | None:
             combined_text = f.read().strip()
 
     if not combined_text:
-        print("No TLE data available. Live scan will fallback to sample DB.")
-        return None
+        print("Live network fetch unavailable. Preserving master dataset in memory.")
+        return live_starlink_df
 
     lines = [l.strip() for l in combined_text.splitlines() if l.strip()]
     rows = []
@@ -146,9 +146,6 @@ def fetch_live_starlink_tles() -> pd.DataFrame | None:
         l1   = lines[i + 1]
         l2   = lines[i + 2]
         if not (l1.startswith('1') and l2.startswith('2')):
-            continue
-        # Filter strictly for Starlink objects if reading from active group
-        if "STARLINK" not in name.upper() and "STARLINK" not in l1.upper():
             continue
         norad = _parse_norad_from_tle1(l1)
         if norad in seen_norads or norad == 0:
@@ -163,15 +160,14 @@ def fetch_live_starlink_tles() -> pd.DataFrame | None:
             "EPOCH":        epoch,
         })
 
-    if not rows:
-        return None
+    if rows:
+        df = pd.DataFrame(rows)
+        df["EPOCH"] = pd.to_datetime(df["EPOCH"], utc=True)
+        live_starlink_df = df
+        live_starlink_updated_at = datetime.now(timezone.utc)
+        print(f"Live TLE fetch complete: {len(df):,} operational satellites loaded into live tracker.")
 
-    df = pd.DataFrame(rows)
-    df["EPOCH"] = pd.to_datetime(df["EPOCH"], utc=True)
-    live_starlink_df = df
-    live_starlink_updated_at = datetime.now(timezone.utc)
-    print(f"Live TLE fetch complete: {len(df):,} operational Starlink satellites across all shells loaded into live tracker.")
-    return df
+    return live_starlink_df
 
 
 def _daily_tle_refresh():
