@@ -62,7 +62,7 @@ except Exception as ex:
 # Live Starlink TLE fetcher (CelesTrak — no auth required)
 # ---------------------------------------------------------------------------
 CELESTRAK_URL = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?FILE=starlink&FORMAT=tle"
-CELESTRAK_ALT_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle"
+CELESTRAK_ALT_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle"
 LIVE_TLE_CACHE = os.path.join(BASE_DIR, "data", "starlink_live_tle.txt")
 
 
@@ -87,38 +87,42 @@ def _parse_norad_from_tle1(line1: str) -> int:
 
 
 def fetch_live_starlink_tles() -> pd.DataFrame | None:
-    """Download current Starlink TLEs for the full constellation from CelesTrak and return a DataFrame."""
+    """Download current Starlink TLEs for ALL ~6,800+ operational satellites across all shells from CelesTrak."""
     global live_starlink_df, live_starlink_updated_at
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    text = ""
+    text_blocks = []
 
     try:
-        print("Fetching live Starlink constellation TLEs from CelesTrak…")
-        resp = requests.get(CELESTRAK_URL, headers=headers, timeout=45)
-        if resp.status_code == 200 and len(resp.text) > 1000:
-            text = resp.text.strip()
-        else:
-            print("Supplemental fetch small response, trying alternative GP endpoint…")
-            resp2 = requests.get(CELESTRAK_ALT_URL, headers=headers, timeout=45)
-            if resp2.status_code == 200 and len(resp2.text) > 1000:
-                text = resp2.text.strip()
-    except Exception as ex:
-        print(f"WARNING: Live CelesTrak fetch failed ({ex}).")
+        print("Fetching live Starlink constellation TLEs (all orbital shells) from CelesTrak…")
+        # Fetch supplemental SpaceX operator ephemeris TLEs
+        r1 = requests.get(CELESTRAK_URL, headers=headers, timeout=45)
+        if r1.status_code == 200 and len(r1.text) > 1000 and "has not updated" not in r1.text:
+            text_blocks.append(r1.text.strip())
 
-    if text and "has not updated since your last successful download" not in text:
+        # Fetch US Space Command active catalog Starlink TLEs
+        r2 = requests.get(CELESTRAK_ALT_URL, headers=headers, timeout=45)
+        if r2.status_code == 200 and len(r2.text) > 1000 and "has not updated" not in r2.text:
+            text_blocks.append(r2.text.strip())
+
+    except Exception as ex:
+        print(f"WARNING: Live CelesTrak fetch encountered issue ({ex}).")
+
+    combined_text = "\n".join(text_blocks).strip()
+
+    if combined_text:
         os.makedirs(os.path.dirname(LIVE_TLE_CACHE), exist_ok=True)
         with open(LIVE_TLE_CACHE, "w", encoding="utf-8") as f:
-            f.write(text)
+            f.write(combined_text)
     elif os.path.exists(LIVE_TLE_CACHE):
-        print("Loading TLEs from local cache…")
+        print("Loading TLEs from local master cache…")
         with open(LIVE_TLE_CACHE, encoding="utf-8") as f:
-            text = f.read().strip()
+            combined_text = f.read().strip()
 
-    if not text:
+    if not combined_text:
         print("No TLE data available. Live scan will fallback to sample DB.")
         return None
 
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [l.strip() for l in combined_text.splitlines() if l.strip()]
     rows = []
     seen_norads = set()
 
@@ -128,8 +132,11 @@ def fetch_live_starlink_tles() -> pd.DataFrame | None:
         l2   = lines[i + 2]
         if not (l1.startswith('1') and l2.startswith('2')):
             continue
+        # Filter strictly for Starlink objects if reading from active group
+        if "STARLINK" not in name.upper() and "STARLINK" not in l1.upper():
+            continue
         norad = _parse_norad_from_tle1(l1)
-        if norad in seen_norads:
+        if norad in seen_norads or norad == 0:
             continue
         seen_norads.add(norad)
         epoch = _parse_epoch_from_tle1(l1)
@@ -148,7 +155,7 @@ def fetch_live_starlink_tles() -> pd.DataFrame | None:
     df["EPOCH"] = pd.to_datetime(df["EPOCH"], utc=True)
     live_starlink_df = df
     live_starlink_updated_at = datetime.now(timezone.utc)
-    print(f"Live TLE fetch complete: {len(df):,} active Starlink satellites loaded into live tracker.")
+    print(f"Live TLE fetch complete: {len(df):,} operational Starlink satellites across all shells loaded into live tracker.")
     return df
 
 
