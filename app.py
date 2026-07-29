@@ -47,16 +47,31 @@ except Exception as ex:
     print(f"WARNING: Could not load StarlinkETACorrector: {ex}")
 
 try:
+MASTER_TLE_CSV = os.path.join(BASE_DIR, "data", "starlink_master_tle.csv")
+
+try:
     if os.path.exists(SAMPLE_CSV):
         print("Loading satellite sample database…")
         sample_df = pd.read_csv(SAMPLE_CSV)
         sample_df["EPOCH"] = pd.to_datetime(sample_df["EPOCH"], utc=True)
         available_norads = sorted(sample_df["NORAD_CAT_ID"].unique().tolist())
-        print(f"Loaded {len(available_norads)} satellites.")
+        print(f"Loaded {len(available_norads)} sample satellites.")
     else:
         print(f"WARNING: {SAMPLE_CSV} not found.")
 except Exception as ex:
     print(f"WARNING: Could not load sample CSV: {ex}")
+
+# Load full master constellation dataset (10,773 satellites) into live_starlink_df at boot
+try:
+    if os.path.exists(MASTER_TLE_CSV):
+        print("Loading full master Starlink constellation dataset...")
+        m_df = pd.read_csv(MASTER_TLE_CSV)
+        m_df["EPOCH"] = pd.to_datetime(m_df["EPOCH"], utc=True)
+        live_starlink_df = m_df
+        live_starlink_updated_at = datetime.now(timezone.utc)
+        print(f"Loaded master constellation: {len(live_starlink_df):,} Starlink satellites ready in memory!")
+except Exception as ex:
+    print(f"WARNING: Could not load master TLE CSV: {ex}")
 
 # ---------------------------------------------------------------------------
 # Live Starlink TLE fetcher (CelesTrak — no auth required)
