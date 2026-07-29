@@ -231,7 +231,7 @@ async def predict(req: PredictRequest):
     # 2. Dynamic single-satellite query fallback from CelesTrak for any valid typed NORAD ID
     if sat_df is None or len(sat_df) == 0:
         try:
-            url_single = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={req.norad_id}&FORMAT=tle"
+            url_single = f"https://celestrak.org/NORAD/elements/gp.php?CATNR={req.norad_id}&FORMAT=tle&ts={int(time.time())}"
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             r_single = requests.get(url_single, headers=headers, timeout=10)
             if r_single.status_code == 200 and len(r_single.text.strip()) > 50:
